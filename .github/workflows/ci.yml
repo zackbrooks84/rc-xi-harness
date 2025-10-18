@@ -28,7 +28,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
           cache: "pip"
 
       - name: Install dependencies
@@ -57,7 +57,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
           cache: "pip"
 
       - name: Install minimal dependencies
@@ -68,13 +68,24 @@ jobs:
       - name: Check that repo imports cleanly
         run: |
           python - <<'PY'
-          import importlib, sys
+          import importlib
+          import os
+          import sys
+          from pathlib import Path
 
-          # Import modules that actually exist in this repo.
+          # Ensure the repository root is on sys.path so local packages like the
+          # pure-Python numpy shim are discoverable even if the working
+          # directory changes. GitHub Actions exposes GITHUB_WORKSPACE for this.
+          workspace = os.environ.get("GITHUB_WORKSPACE") or str(Path.cwd())
+          if workspace not in sys.path:
+              sys.path.insert(0, workspace)
+
+          # Import modules that actually exist in this repository to catch
+          # packaging or dependency regressions early.
           modules_to_check = [
-              "identity_core",                        # package
-              "identity_core.anchor_phrases",         # module
-              "identity_core.identity_loader",        # adjust if your module name differs
+              "harness.run_harness",
+              "harness.io.transcript",
+              "harness.embeddings.providers",
           ]
 
           ok = True
@@ -105,7 +116,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
           cache: "pip"
 
       - name: Install test dependencies
