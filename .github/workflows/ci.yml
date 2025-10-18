@@ -29,6 +29,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+          allow-prereleases: true
           cache: "pip"
 
       - name: Install dependencies
@@ -58,6 +59,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+          allow-prereleases: true
           cache: "pip"
 
       - name: Install minimal dependencies
@@ -68,7 +70,6 @@ jobs:
       - name: Check that repo imports cleanly
         run: |
           python - <<'PY'
-
           import importlib
           import os
           import sys
@@ -80,9 +81,6 @@ jobs:
           workspace = os.environ.get("GITHUB_WORKSPACE") or str(Path.cwd())
           if workspace not in sys.path:
               sys.path.insert(0, workspace)
-=======
-          import importlib, sys
-
 
           # Import modules that actually exist in this repository to catch
           # packaging or dependency regressions early.
@@ -97,9 +95,9 @@ jobs:
               try:
                   importlib.import_module(mod)
                   print(f"[OK] imported {mod}")
-              except Exception as e:
+              except Exception as exc:
                   ok = False
-                  print(f"[FAIL] {mod}: {e}")
+                  print(f"[FAIL] {mod}: {exc}")
 
           sys.exit(0 if ok else 1)
           PY
@@ -121,6 +119,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+          allow-prereleases: true
           cache: "pip"
 
       - name: Install test dependencies
