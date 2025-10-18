@@ -24,7 +24,7 @@ def mann_whitney_u(x: np.ndarray, y: np.ndarray) -> Tuple[float, float]:
 
     # tie correction
     ties = _tie_counts(z)
-    tie_term = np.sum(t * (t*t - 1) for t in ties)
+    tie_term = sum(t * (t * t - 1) for t in ties)
     var = n1 * n2 * (n1 + n2 + 1) / 12.0
     if tie_term > 0:
         var -= n1 * n2 * tie_term / (12.0 * (n1 + n2) * (n1 + n2 - 1))
