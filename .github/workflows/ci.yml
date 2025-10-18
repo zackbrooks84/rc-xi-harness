@@ -70,11 +70,12 @@ jobs:
           python - <<'PY'
           import importlib, sys
 
-          # Import modules that actually exist in this repo.
+          # Import modules that actually exist in this repository to catch
+          # packaging or dependency regressions early.
           modules_to_check = [
-              "identity_core",                        # package
-              "identity_core.anchor_phrases",         # module
-              "identity_core.identity_loader",        # adjust if your module name differs
+              "harness.run_harness",
+              "harness.io.transcript",
+              "harness.embeddings.providers",
           ]
 
           ok = True
