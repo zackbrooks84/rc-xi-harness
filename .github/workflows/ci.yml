@@ -1,0 +1,119 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  typecheck:
+    name: Static type check (mypy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -U pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt || true; fi
+          pip install mypy types-requests types-setuptools
+
+      - name: Run mypy
+        run: |
+          if [ -f mypy.ini ] || grep -q "\[tool.mypy\]" pyproject.toml 2>/dev/null || grep -q "mypy" setup.cfg 2>/dev/null; then
+            mypy .
+          else
+            echo "No mypy config found, skipping."
+          fi
+
+  sanity:
+    name: Sanity check (imports + formatting)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install minimal dependencies
+        run: |
+          python -m pip install -U pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Check that repo imports cleanly
+        run: |
+          python - <<'PY'
+          import importlib, sys
+
+          # Import modules that actually exist in this repo.
+          modules_to_check = [
+              "identity_core",                        # package
+              "identity_core.anchor_phrases",         # module
+              "identity_core.identity_loader",        # adjust if your module name differs
+          ]
+
+          ok = True
+          for mod in modules_to_check:
+              try:
+                  importlib.import_module(mod)
+                  print(f"[OK] imported {mod}")
+              except Exception as e:
+                  ok = False
+                  print(f"[FAIL] {mod}: {e}")
+
+          sys.exit(0 if ok else 1)
+          PY
+
+      - name: Verify formatting with black (non-blocking)
+        run: |
+          pip install black
+          black --check . || true  # warn but don’t fail hard
+
+  pytest:
+    name: Run basic tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install -U pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest
+
+      - name: Run pytest 
+        run: |
+          pytest -q 
