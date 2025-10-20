@@ -16,12 +16,15 @@ still matching the semantics relied upon by the tests.
 
 from __future__ import annotations
 
+import ast
 import builtins
 import math
 import operator
+import os
 import random as _py_random
+import struct
 from collections import Counter
-from typing import Any, Callable, Iterable, Iterator, List, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple, Union, BinaryIO
 
 Number = Union[int, float]
 
@@ -53,6 +56,29 @@ def _prod(values: Sequence[int]) -> int:
     for v in values:
         result *= v
     return result
+
+
+def _reshape_from_flat(values: List[Any], shape: Tuple[int, ...]) -> Any:
+    """Reshape a flat value list into a nested structure matching ``shape``."""
+
+    if not shape:
+        if len(values) != 1:
+            raise ValueError("scalar arrays require exactly one element")
+        return values[0]
+
+    if not values:
+        return [
+            _reshape_from_flat([], shape[1:])
+            for _ in range(shape[0])
+        ]
+
+    step = _prod(shape[1:]) if len(shape) > 1 else 1
+    reshaped: List[Any] = []
+    for index in range(shape[0]):
+        start = index * step
+        end = start + step
+        reshaped.append(_reshape_from_flat(values[start:end], shape[1:]))
+    return reshaped
 
 
 def _to_nested_list(value: Any) -> Any:
@@ -746,6 +772,138 @@ def expand_dims(a: Any, axis: int) -> ndarray:
     return ndarray(_rec(arr._data, axis))
 
 
+_PathLike = Union[str, os.PathLike[str]]
+_NPY_DTYPE_MAP: Dict[str, Tuple[str, Callable[[Any], Any], bool]] = {
+    "<f8": ("d", float, True),
+    "<f4": ("f", float, True),
+    "<i8": ("q", int, True),
+    "<i4": ("i", int, True),
+    "<i2": ("h", int, True),
+    "<u8": ("Q", int, True),
+    "<u4": ("I", int, True),
+    "<u2": ("H", int, True),
+    "|i1": ("b", int, False),
+    "|u1": ("B", int, False),
+    "|b1": ("?", bool, False),
+}
+
+
+def load(file: Union[_PathLike, BinaryIO], allow_pickle: bool = False) -> ndarray:
+    """Load an array stored in NumPy's ``.npy`` format.
+
+    Parameters
+    ----------
+    file:
+        Filesystem path or binary stream positioned at the beginning of a
+        ``.npy`` payload.
+    allow_pickle:
+        Object arrays that rely on Python pickles are intentionally
+        unsupported.  Passing ``True`` raises :class:`ValueError` to make the
+        failure explicit.
+
+    Returns
+    -------
+    ndarray
+        Pure-Python ``ndarray`` containing the decoded numeric data.
+
+    Raises
+    ------
+    ValueError
+        If the payload is malformed or uses a version newer than 2.0.
+    NotImplementedError
+        When the dtype descriptor or Fortran-order flag require semantics that
+        the lightweight implementation does not cover.
+    """
+
+    if allow_pickle:
+        raise ValueError("pickle-based object arrays are not supported")
+
+    file_obj: BinaryIO
+    should_close = False
+    if isinstance(file, (str, bytes, os.PathLike)):
+        file_obj = open(file, "rb")
+        should_close = True
+    elif hasattr(file, "read"):
+        file_obj = file  # type: ignore[assignment]
+    else:
+        raise TypeError("file must be a filesystem path or binary file object")
+
+    try:
+        magic = file_obj.read(6)
+        if magic != b"\x93NUMPY":
+            raise ValueError("invalid npy file: missing magic prefix")
+
+        version_raw = file_obj.read(2)
+        if len(version_raw) != 2:
+            raise ValueError("invalid npy file: truncated version field")
+        major, minor = version_raw
+        if major not in (1, 2):
+            raise ValueError(f"unsupported npy file version: {major}.{minor}")
+
+        if major == 1:
+            header_len_bytes = file_obj.read(2)
+            if len(header_len_bytes) != 2:
+                raise ValueError("invalid npy file: truncated header length")
+            header_len = struct.unpack("<H", header_len_bytes)[0]
+        else:
+            header_len_bytes = file_obj.read(4)
+            if len(header_len_bytes) != 4:
+                raise ValueError("invalid npy file: truncated header length")
+            header_len = struct.unpack("<I", header_len_bytes)[0]
+
+        header = file_obj.read(header_len)
+        if len(header) != header_len:
+            raise ValueError("invalid npy file: truncated header")
+
+        header_text = header.decode("latin1").strip()
+        try:
+            header_dict = ast.literal_eval(header_text)
+        except (SyntaxError, ValueError) as exc:
+            raise ValueError("invalid npy header") from exc
+
+        if bool(header_dict.get("fortran_order", False)):
+            raise NotImplementedError("Fortran-order arrays are not supported")
+
+        descr = header_dict.get("descr")
+        if not isinstance(descr, str):
+            raise ValueError("invalid dtype descriptor in npy header")
+
+        dtype_meta = _NPY_DTYPE_MAP.get(descr)
+        if dtype_meta is None:
+            raise NotImplementedError(f"unsupported dtype descriptor {descr!r}")
+        fmt_char, caster, needs_le = dtype_meta
+
+        shape = header_dict.get("shape")
+        if isinstance(shape, int):
+            shape = (shape,)
+        if not isinstance(shape, tuple):
+            raise ValueError("invalid shape in npy header")
+        if any(not isinstance(dim, int) for dim in shape):
+            raise ValueError("invalid shape in npy header")
+
+        count = _prod(shape)
+        prefix = "<" if needs_le else ""
+        itemsize = struct.calcsize(prefix + fmt_char)
+        expected_bytes = itemsize * count
+
+        data = file_obj.read(expected_bytes)
+        if len(data) != expected_bytes:
+            raise ValueError("invalid npy file: truncated data section")
+
+        if count == 0:
+            values: List[Any] = []
+        else:
+            format_string = prefix + (fmt_char * count)
+            unpacked = struct.unpack(format_string, data)
+            values = [caster(value) for value in unpacked]
+
+        nested = _reshape_from_flat(values, shape)
+        return ndarray(nested)
+    finally:
+        if should_close:
+            file_obj.close()
+
+
 def _norm(values: Iterable[float]) -> float:
     return math.sqrt(math.fsum(float(v) ** 2 for v in values))
 
@@ -854,6 +1012,7 @@ __all__ = [
     "isfinite",
     "linspace",
     "expand_dims",
+    "load",
     "linalg",
     "random",
     "inf",
