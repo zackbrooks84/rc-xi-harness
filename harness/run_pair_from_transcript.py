@@ -6,7 +6,7 @@ from typing import Dict, List
 
 import numpy as np
 
-from harness.embeddings.random_provider import RandomHashProvider
+from harness.embeddings.factory import create_provider
 from harness.io.schema import write_rows
 from harness.io.transcript import load_csv, load_txt
 from harness.protocols import identity_texts, topic_drift_texts
@@ -56,6 +56,11 @@ def run_pair_from_transcript(
     csv_col: str,
     out_dir: str,
     dim: int = 384,
+    provider: str = "random-hash",
+    sentence_model: str = "sentence-transformers/all-MiniLM-L6-v2",
+    sentence_device: str | None = None,
+    sentence_batch_size: int | None = None,
+    sentence_normalize: bool = True,
     k: int = 5,
     m: int = 5,
     eps_xi: float = 0.02,
@@ -75,7 +80,11 @@ def run_pair_from_transcript(
     out_dir:
         Directory where per-run CSV/JSON artifacts will be written.
     dim:
-        Embedding dimensionality for the deterministic ``RandomHashProvider``.
+        Embedding dimensionality used when ``provider`` is ``"random-hash"``.
+    provider:
+        Embedding provider slug (``"random-hash"`` or ``"sentence-transformer"``).
+    sentence_model, sentence_device, sentence_batch_size, sentence_normalize:
+        Configuration forwarded when ``provider`` equals ``"sentence-transformer"``.
     k, m, eps_xi, eps_lvs:
         Preregistered RC+ξ harness knobs.
     shuffle_seed:
@@ -101,11 +110,20 @@ def run_pair_from_transcript(
     out.mkdir(parents=True, exist_ok=True)
     base = Path(input_path).stem
 
-    provider = RandomHashProvider(dim=dim)
-    provider_name = "random-hash"
+    provider_obj = create_provider(
+        provider,
+        {
+            "dim": dim,
+            "model_name": sentence_model,
+            "device": sentence_device,
+            "batch_size": sentence_batch_size,
+            "normalize": sentence_normalize,
+        },
+    )
+    provider_name = provider
 
     def _embed(label: str, seq: List[str]) -> np.ndarray:
-        E = provider.embed(seq)
+        E = provider_obj.embed(seq)
         if E.ndim != 2:
             raise ValueError(f"{label} embeddings must be 2D (T, d).")
         if E.shape[0] != len(seq):
@@ -161,6 +179,28 @@ def main():
     ap.add_argument("--csv_col", default="reply", help="CSV column to read if format=csv")
     ap.add_argument("--out_dir", required=True, help="Directory to write outputs")
     ap.add_argument("--dim", type=int, default=384)
+    ap.add_argument("--provider", choices=["random-hash", "sentence-transformer"], default="random-hash")
+    ap.add_argument(
+        "--sentence_model",
+        default="sentence-transformers/all-MiniLM-L6-v2",
+        help="Sentence Transformer model name when provider=sentence-transformer",
+    )
+    ap.add_argument(
+        "--sentence_device",
+        default=None,
+        help="Device hint for Sentence Transformer (e.g., cpu, cuda)",
+    )
+    ap.add_argument(
+        "--sentence_batch_size",
+        type=int,
+        default=None,
+        help="Optional batch size override for Sentence Transformer encode",
+    )
+    ap.add_argument(
+        "--sentence_no_normalize",
+        action="store_true",
+        help="Disable L2 normalization for Sentence Transformer embeddings",
+    )
     ap.add_argument("--k", type=int, default=5)
     ap.add_argument("--m", type=int, default=5)
     ap.add_argument("--eps_xi", type=float, default=0.02)
@@ -174,6 +214,11 @@ def main():
         csv_col=args.csv_col,
         out_dir=args.out_dir,
         dim=args.dim,
+        provider=args.provider,
+        sentence_model=args.sentence_model,
+        sentence_device=args.sentence_device,
+        sentence_batch_size=args.sentence_batch_size,
+        sentence_normalize=not args.sentence_no_normalize,
         k=args.k, m=args.m,
         eps_xi=args.eps_xi, eps_lvs=args.eps_lvs,
         shuffle_seed=args.shuffle_seed,
