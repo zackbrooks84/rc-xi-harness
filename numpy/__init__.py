@@ -554,6 +554,42 @@ def concatenate(arrays: Sequence[Any], axis: int = 0) -> ndarray:
     raise NotImplementedError("concatenate only implemented for 1D and 2D arrays")
 
 
+def stack(arrays: Sequence[Any], axis: int = 0) -> ndarray:
+    """Stack arrays along a new axis, matching NumPy's basic semantics."""
+
+    if not arrays:
+        raise ValueError("need at least one array to stack")
+
+    converted = [asarray(a) for a in arrays]
+    ref_shape = converted[0].shape
+    for arr in converted[1:]:
+        if arr.shape != ref_shape:
+            raise ValueError("all input arrays must have the same shape")
+
+    axis = _normalize_axis(axis, converted[0].ndim + 1)
+    nested = [arr.tolist() for arr in converted]
+
+    def _stack(values: Sequence[Any], depth: int) -> Any:
+        if depth == 0:
+            return [_deep_copy(v) for v in values]
+        if not values:
+            raise ValueError("cannot stack empty values")
+        first = values[0]
+        if not isinstance(first, list):
+            raise ValueError("axis out of range for stacking")
+        length = len(first)
+        for item in values:
+            if not isinstance(item, list) or len(item) != length:
+                raise ValueError("input arrays must have matching shapes")
+        return [
+            _stack([item[i] for item in values], depth - 1)
+            for i in range(length)
+        ]
+
+    result = _stack(nested, axis)
+    return ndarray(result)
+
+
 def _flatten(data: Any) -> List[float]:
     if isinstance(data, ndarray):
         return _flatten(data._data)
@@ -788,6 +824,47 @@ _NPY_DTYPE_MAP: Dict[str, Tuple[str, Callable[[Any], Any], bool]] = {
 }
 
 
+def save(file: Union[_PathLike, BinaryIO], arr: Any) -> None:
+    """Write an array to a ``.npy`` file using a float64 payload."""
+
+    array = asarray(arr, dtype=float)
+    flat = _flatten(array)
+
+    header_dict = {
+        "descr": "<f8",
+        "fortran_order": False,
+        "shape": array.shape,
+    }
+    header_text = str(header_dict)
+    header_bytes = header_text.encode("latin1")
+    header_len = len(header_bytes) + 1
+    padding = (16 - ((10 + header_len) % 16)) % 16
+    header_bytes += b" " * padding + b"\n"
+
+    file_obj: BinaryIO
+    should_close = False
+    if isinstance(file, (str, bytes, os.PathLike)):
+        file_obj = open(file, "wb")
+        should_close = True
+    elif hasattr(file, "write"):
+        file_obj = file  # type: ignore[assignment]
+    else:
+        raise TypeError("file must be a filesystem path or binary file object")
+
+    try:
+        file_obj.write(b"\x93NUMPY")
+        file_obj.write(bytes([1, 0]))
+        file_obj.write(struct.pack("<H", len(header_bytes)))
+        file_obj.write(header_bytes)
+
+        fmt_char, _, _ = _NPY_DTYPE_MAP["<f8"]
+        payload = struct.pack("<" + fmt_char * len(flat), *flat)
+        file_obj.write(payload)
+    finally:
+        if should_close:
+            file_obj.close()
+
+
 def load(file: Union[_PathLike, BinaryIO], allow_pickle: bool = False) -> ndarray:
     """Load an array stored in NumPy's ``.npy`` format.
 
@@ -977,9 +1054,26 @@ class _Generator:
         return ndarray(arr)
 
 
+class _RandomState:
+    """Compat wrapper exposing a ``randn`` API similar to NumPy."""
+
+    def __init__(self, seed: Optional[int] = None):
+        self._generator = _Generator(seed)
+
+    def randn(self, *size: int) -> Any:
+        if not size:
+            return float(self._generator.normal())
+        if len(size) == 1:
+            return self._generator.normal(size=(size[0],))
+        return self._generator.normal(size=tuple(size))
+
+
 class _RandomModule:
     def default_rng(self, seed: Optional[int] = None) -> _Generator:
         return _Generator(seed)
+
+    def RandomState(self, seed: Optional[int] = None) -> _RandomState:
+        return _RandomState(seed)
 
 
 linalg = _LinalgModule()
@@ -992,6 +1086,7 @@ ndarray = ndarray
 __all__ = [
     "array",
     "asarray",
+    "stack",
     "zeros",
     "zeros_like",
     "empty_like",
@@ -1012,6 +1107,7 @@ __all__ = [
     "isfinite",
     "linspace",
     "expand_dims",
+    "save",
     "load",
     "linalg",
     "random",
