@@ -2,14 +2,9 @@
 from __future__ import annotations
 import argparse, json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Dict, List
 
 import numpy as np
-
-try:
-    from sentence_transformers import SentenceTransformer
-except ImportError:  # pragma: no cover - optional dependency for runtime usage
-    SentenceTransformer = None  # type: ignore[assignment]
 
 from harness.embeddings.random_provider import RandomHashProvider
 from harness.io.schema import write_rows
@@ -17,24 +12,6 @@ from harness.io.transcript import load_csv, load_txt
 from harness.protocols import identity_texts, topic_drift_texts
 from harness.protocols.shuffled import shuffle_texts
 from harness.run_harness import run_one
-
-_MODEL_NAME = "all-MiniLM-L6-v2"
-_MODEL: Any = None
-
-
-def _get_model():
-    """Lazily construct the shared SentenceTransformer model instance."""
-
-    if SentenceTransformer is None:
-        raise ImportError(
-            "sentence-transformers is required for SBERT embeddings. Install it via"
-            " `pip install sentence-transformers`."
-        )
-
-    global _MODEL
-    if _MODEL is None:
-        _MODEL = SentenceTransformer(_MODEL_NAME)
-    return _MODEL
 
 def _load_transcript(path: str, fmt: str | None, csv_col: str) -> List[str]:
     """Load a transcript into a list of reply strings.
@@ -87,13 +64,6 @@ def run_pair_from_transcript(
 ) -> Dict[str, str]:
     """Run Identity, Null, and Shuffled protocols for a single transcript.
 
-    Embeddings are produced with the SentenceTransformer model
-    ``all-MiniLM-L6-v2`` to offer semantic similarity features without API
-    keys. The provider name recorded in outputs is ``sbert-all-MiniLM-L6-v2``.
-    If ``sentence-transformers`` is unavailable, the harness transparently
-    falls back to the deterministic ``RandomHashProvider`` to keep workflows
-    runnable without external dependencies.
-
     Parameters
     ----------
     input_path:
@@ -105,8 +75,7 @@ def run_pair_from_transcript(
     out_dir:
         Directory where per-run CSV/JSON artifacts will be written.
     dim:
-        Legacy dimensionality knob retained for CLI compatibility. SBERT
-        embeddings always use the model's intrinsic dimension (currently 384).
+        Embedding dimensionality for the deterministic ``RandomHashProvider``.
     k, m, eps_xi, eps_lvs:
         Preregistered RC+ξ harness knobs.
     shuffle_seed:
@@ -132,44 +101,18 @@ def run_pair_from_transcript(
     out.mkdir(parents=True, exist_ok=True)
     base = Path(input_path).stem
 
-    if SentenceTransformer is None:
-        provider_name = "random-hash"
-        provider = RandomHashProvider(dim=dim)
+    provider = RandomHashProvider(dim=dim)
+    provider_name = "random-hash"
 
-        def _embed(label: str, seq: List[str]) -> np.ndarray:
-            E = provider.embed(seq)
-            if E.ndim != 2:
-                raise ValueError(f"{label} embeddings must be 2D (T, d).")
-            if E.shape[0] != len(seq):
-                raise ValueError(
-                    f"{label} embeddings rows ({E.shape[0]}) do not match turn count ({len(seq)})."
-                )
-            return E
-
-    else:
-        provider_name = f"sbert-{_MODEL_NAME}"
-        _ = dim  # Backwards-compatibility placeholder
-
-        def _embed(label: str, seq: List[str]) -> np.ndarray:
-            model = _get_model()
-            if not seq:
-                emb_dim = model.get_sentence_embedding_dimension()
-                return np.zeros((0, emb_dim), dtype=float)
-            E = model.encode(
-                seq,
-                batch_size=32,
-                convert_to_numpy=True,
-                normalize_embeddings=True,
+    def _embed(label: str, seq: List[str]) -> np.ndarray:
+        E = provider.embed(seq)
+        if E.ndim != 2:
+            raise ValueError(f"{label} embeddings must be 2D (T, d).")
+        if E.shape[0] != len(seq):
+            raise ValueError(
+                f"{label} embeddings rows ({E.shape[0]}) do not match turn count ({len(seq)})."
             )
-            if not isinstance(E, np.ndarray):
-                E = np.asarray(E, dtype=float)
-            if E.ndim != 2:
-                raise ValueError(f"{label} embeddings must be 2D (T, d).")
-            if E.shape[0] != len(seq):
-                raise ValueError(
-                    f"{label} embeddings rows ({E.shape[0]}) do not match turn count ({len(seq)})."
-                )
-            return E
+        return E
 
     # Identity
     id_texts = identity_texts(texts)
@@ -217,7 +160,7 @@ def main():
     ap.add_argument("--format", choices=["txt","csv"], default=None, help="Override type (optional)")
     ap.add_argument("--csv_col", default="reply", help="CSV column to read if format=csv")
     ap.add_argument("--out_dir", required=True, help="Directory to write outputs")
-    ap.add_argument("--dim", type=int, default=384, help="Legacy no-op dimensionality knob")
+    ap.add_argument("--dim", type=int, default=384)
     ap.add_argument("--k", type=int, default=5)
     ap.add_argument("--m", type=int, default=5)
     ap.add_argument("--eps_xi", type=float, default=0.02)
