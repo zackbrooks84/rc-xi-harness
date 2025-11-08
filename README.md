@@ -7,7 +7,7 @@ Defined in `harness/config.yaml`:
 - `k = 5`, `m = 5`
 - `eps_xi = 0.02`, `eps_lvs = 0.015`
 - fixed `temperature`, identical `system_prompt`, `seed: 42`
-- two embedding providers for robustness
+- two embedding providers for robustness (deterministic `random-hash` and optional `sentence-transformer`)
 
 ## Metrics
 - **ξ**: `ξ_t = 1 − cos(e_t, e_{t−1})`
@@ -16,19 +16,19 @@ Defined in `harness/config.yaml`:
 - **EWMA**: smoothed ξ series (α = 0.5)
 
 ## Endpoints
-- **E1**: median ξ over the final 10 turns  
-- **E2**: `T_lock` (first turn where last `m` ξ < `eps_xi` **and** latest LVS < `eps_lvs`)  
-- **E3**: `P_t` trend ↑ in Identity vs flat/↓ in Null  
+- **E1**: median ξ over the final 10 turns
+- **E2**: `T_lock` (first turn where last `m` ξ < `eps_xi` **and** latest LVS < `eps_lvs`)
+- **E3**: `P_t` trend ↑ in Identity vs flat/↓ in Null
 - **E4**: results stable across ≥ 2 embedding providers
 
 ## Runs
-- **Identity**: Δ-pressure prompts that drive self-consistency  
-- **Null**: topic drift every 2–3 turns to prevent attractor  
+- **Identity**: Δ-pressure prompts that drive self-consistency
+- **Null**: topic drift every 2–3 turns to prevent attractor
 - **Shuffled**: permute Identity replies to break temporal recursion
 
 ## Ablations
-- Shuffled should destroy lock  
-- Paraphrase-noise should not break Identity lock  
+- Shuffled should destroy lock
+- Paraphrase-noise should not break Identity lock
 - Anchor-swap should remove the `P_t` advantage
 
 ## Outputs
@@ -51,9 +51,24 @@ python -m harness.analysis.eval_cli \
 
 ## Quickstart
 Once you have a `(T, d)` NumPy file of embeddings:
+
 ```bash
 python -m harness.run_harness \
   --embed_npy data/identity.npy \
   --run_type identity \
   --out_csv out/identity.csv \
   --out_json out/identity.json
+```
+
+To run the transcript pipelines with Sentence Transformers (install
+`sentence-transformers` first):
+
+```bash
+python -m harness.run_from_transcript \
+  --input data/transcript.txt \
+  --run_type identity \
+  --provider sentence-transformer \
+  --sentence_model sentence-transformers/all-MiniLM-L6-v2 \
+  --out_csv out/identity.csv \
+  --out_json out/identity.json
+```

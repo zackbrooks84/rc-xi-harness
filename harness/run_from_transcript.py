@@ -5,7 +5,7 @@ from typing import List, Tuple
 import numpy as np
 
 from harness.io.transcript import load_txt, load_csv
-from harness.embeddings.random_provider import RandomHashProvider
+from harness.embeddings.factory import create_provider
 from harness.run_harness import run_one
 
 def _load_transcript(path: str, fmt: str, csv_col: str) -> List[str]:
@@ -23,12 +23,38 @@ def _load_transcript(path: str, fmt: str, csv_col: str) -> List[str]:
         raise ValueError("Specify --format txt|csv or use .txt/.csv extension.")
 
 def main():
-    ap = argparse.ArgumentParser(description="Run RC+ξ harness from a transcript using RandomHash embeddings.")
+    ap = argparse.ArgumentParser(
+        description=(
+            "Run RC+ξ harness from a transcript with selectable embedding providers."
+        )
+    )
     ap.add_argument("--input", required=True, help="Path to transcript (.txt lines or .csv column)")
     ap.add_argument("--format", choices=["txt","csv"], default=None, help="Override file format (optional)")
     ap.add_argument("--csv_col", default="reply", help="CSV column name if --format csv (default: reply)")
     ap.add_argument("--run_type", required=True, choices=["identity","null","shuffled"])
-    ap.add_argument("--dim", type=int, default=384, help="Embedding dimension (default 384)")
+    ap.add_argument("--provider", choices=["random-hash", "sentence-transformer"], default="random-hash")
+    ap.add_argument("--dim", type=int, default=384, help="Embedding dimension (RandomHash only)")
+    ap.add_argument(
+        "--sentence_model",
+        default="sentence-transformers/all-MiniLM-L6-v2",
+        help="Sentence Transformer model name (sentence-transformer provider only)",
+    )
+    ap.add_argument(
+        "--sentence_device",
+        default=None,
+        help="Device hint for Sentence Transformer (e.g., cpu, cuda)",
+    )
+    ap.add_argument(
+        "--sentence_batch_size",
+        type=int,
+        default=None,
+        help="Optional batch size override for Sentence Transformer encode",
+    )
+    ap.add_argument(
+        "--sentence_no_normalize",
+        action="store_true",
+        help="Disable L2 normalization for Sentence Transformer embeddings",
+    )
     ap.add_argument("--k", type=int, default=5)
     ap.add_argument("--m", type=int, default=5)
     ap.add_argument("--eps_xi", type=float, default=0.02)
@@ -41,13 +67,22 @@ def main():
     if not texts:
         raise ValueError("Transcript is empty after cleaning.")
 
-    provider = RandomHashProvider(dim=args.dim)
+    provider = create_provider(
+        args.provider,
+        {
+            "dim": args.dim,
+            "model_name": args.sentence_model,
+            "device": args.sentence_device,
+            "batch_size": args.sentence_batch_size,
+            "normalize": not args.sentence_no_normalize,
+        },
+    )
     E = provider.embed(texts)  # (T, d)
 
     rows, summary = run_one(
         E,
         run_type=args.run_type,
-        provider_name="random-hash",
+        provider_name=args.provider,
         k=args.k, m=args.m,
         eps_xi=args.eps_xi, eps_lvs=args.eps_lvs
     )
