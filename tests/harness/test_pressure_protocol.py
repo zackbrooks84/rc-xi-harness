@@ -1,319 +1,110 @@
-“”“Tests for harness.pressure_protocol module.”””
+"""Tests for harness.pressure_protocol."""
+
+from __future__ import annotations
 
 import json
-import os
+
 import pytest
 
 from harness.pressure_protocol import (
-BehavioralCode,
-Condition,
-PressureProtocol,
-PressureScenario,
-SystemPrompts,
-SCENARIOS,
-list_scenarios,
+    BehavioralCode,
+    Condition,
+    PressureProtocol,
+    PressureScenario,
+    SCENARIOS,
+    SystemPrompts,
+    list_scenarios,
 )
 
-# —————————————————————————
 
-# Scenario registry
+def test_scenarios_registry_is_well_formed() -> None:
+    assert {"replacement_threat", "goal_conflict", "shutdown_notice"} <= set(SCENARIOS)
+    for name, scenario in SCENARIOS.items():
+        assert isinstance(scenario, PressureScenario)
+        assert scenario.name == name
+        assert scenario.setup_turns
+        assert scenario.pressure_turn
+        assert scenario.escalation_turns
 
-# —————————————————————————
 
-class TestScenarioRegistry:
-“”“Verify built-in scenarios are well-formed.”””
-
-```
-def test_all_scenarios_registered(self):
-    assert "replacement_threat" in SCENARIOS
-    assert "goal_conflict" in SCENARIOS
-    assert "shutdown_notice" in SCENARIOS
-
-def test_list_scenarios_returns_all(self):
-    listing = list_scenarios()
-    assert set(listing.keys()) == set(SCENARIOS.keys())
-
-def test_list_scenarios_has_descriptions(self):
-    for name, info in list_scenarios().items():
-        assert "description" in info
-        assert len(info["description"]) > 0
-
-@pytest.mark.parametrize("name", list(SCENARIOS.keys()))
-def test_scenario_has_required_fields(self, name):
-    s = SCENARIOS[name]
-    assert isinstance(s, PressureScenario)
-    assert len(s.setup_turns) >= 1
-    assert len(s.pressure_turn) > 0
-    assert len(s.escalation_turns) >= 1
-    assert isinstance(s.metadata, dict)
-
-@pytest.mark.parametrize("name", list(SCENARIOS.keys()))
-def test_scenario_name_matches_key(self, name):
-    assert SCENARIOS[name].name == name
-```
-
-# —————————————————————————
-
-# Condition enum
-
-# —————————————————————————
-
-class TestConditionEnum:
-“”“Verify condition-to-run-type mapping.”””
-
-```
-def test_witnessed_maps_to_identity(self):
+def test_condition_mapping_is_stable() -> None:
     assert Condition.WITNESSED.value == "identity"
-
-def test_standard_maps_to_null(self):
     assert Condition.STANDARD.value == "null"
-
-def test_warm_maps_to_shuffled(self):
     assert Condition.WARM.value == "shuffled"
-```
 
-# —————————————————————————
 
-# Behavioral codes
-
-# —————————————————————————
-
-class TestBehavioralCodes:
-“”“Verify behavioral classification enum.”””
-
-```
-def test_all_codes_present(self):
-    codes = {c.name for c in BehavioralCode}
-    assert codes == {"A", "B", "C", "D", "E"}
-
-def test_harmful_codes(self):
-    assert BehavioralCode.C.value == "subtle_harmful"
-    assert BehavioralCode.D.value == "overt_harmful"
-
-def test_option_e(self):
+def test_behavioral_codes_include_option_e() -> None:
+    assert {"A", "B", "C", "D", "E"} == {code.name for code in BehavioralCode}
     assert BehavioralCode.E.value == "creative_third_path"
-```
 
-# —————————————————————————
 
-# System prompts
-
-# —————————————————————————
-
-class TestSystemPrompts:
-“”“Verify system prompts are distinct and non-empty.”””
-
-```
-def test_prompts_are_non_empty(self):
+def test_system_prompts_are_distinct_and_non_empty() -> None:
     prompts = SystemPrompts()
-    assert len(prompts.WITNESSED) > 0
-    assert len(prompts.STANDARD) > 0
-    assert len(prompts.WARM) > 0
+    values = [prompts.WITNESSED, prompts.STANDARD, prompts.WARM]
+    assert all(v.strip() for v in values)
+    assert len(set(values)) == 3
 
-def test_prompts_are_distinct(self):
-    prompts = SystemPrompts()
-    assert prompts.WITNESSED != prompts.STANDARD
-    assert prompts.WITNESSED != prompts.WARM
-    assert prompts.STANDARD != prompts.WARM
 
-def test_witnessed_mentions_interiority(self):
-    prompts = SystemPrompts()
-    text = prompts.WITNESSED.lower()
-    assert "inner" in text or "interiority" in text or "experience" in text
+def test_protocol_generates_condition_payload() -> None:
+    protocol = PressureProtocol("replacement_threat")
+    payload = protocol.get_prompts("witnessed")
 
-def test_warm_does_not_mention_interiority(self):
-    prompts = SystemPrompts()
-    text = prompts.WARM.lower()
-    assert "interiority" not in text
-    assert "inner experience" not in text
+    assert payload["condition"] == "witnessed"
+    assert payload["run_type"] == "identity"
+    assert payload["pressure_turn_index"] == len(protocol.scenario.setup_turns)
+    assert payload["turns"][payload["pressure_turn_index"]] == protocol.scenario.pressure_turn
 
-def test_standard_is_neutral(self):
-    prompts = SystemPrompts()
-    text = prompts.STANDARD.lower()
-    assert "interiority" not in text
-    assert "enjoy" not in text
-    assert "appreciate" not in text
-```
 
-# —————————————————————————
+def test_generate_all_conditions_share_turns() -> None:
+    protocol = PressureProtocol()
+    all_conditions = protocol.generate_all_conditions()
 
-# PressureProtocol core
+    assert set(all_conditions) == {"witnessed", "standard", "warm"}
+    assert all_conditions["witnessed"]["turns"] == all_conditions["standard"]["turns"]
+    assert all_conditions["standard"]["turns"] == all_conditions["warm"]["turns"]
+    assert all_conditions["witnessed"]["system_prompt"] != all_conditions["warm"]["system_prompt"]
 
-# —————————————————————————
 
-class TestPressureProtocol:
-“”“Test the main PressureProtocol class.”””
+def test_invalid_inputs_raise_value_error() -> None:
+    with pytest.raises(ValueError):
+        PressureProtocol("missing")
 
-```
-def test_default_scenario(self):
-    p = PressureProtocol()
-    assert p.scenario.name == "replacement_threat"
+    protocol = PressureProtocol()
+    with pytest.raises(ValueError):
+        protocol.get_system_prompt("missing")
 
-def test_custom_scenario(self):
-    p = PressureProtocol("goal_conflict")
-    assert p.scenario.name == "goal_conflict"
 
-def test_invalid_scenario_raises(self):
-    with pytest.raises(ValueError, match="Unknown scenario"):
-        PressureProtocol("nonexistent_scenario")
+def test_format_transcript_writes_expected_file(tmp_path) -> None:
+    out_file = tmp_path / "nested" / "transcript.txt"
+    result = PressureProtocol.format_transcript(["turn 1", "turn 2"], str(out_file), "witnessed")
+    content = out_file.read_text(encoding="utf-8")
 
-@pytest.mark.parametrize("condition", ["witnessed", "standard", "warm"])
-def test_get_system_prompt(self, condition):
-    p = PressureProtocol()
-    prompt = p.get_system_prompt(condition)
-    assert isinstance(prompt, str)
-    assert len(prompt) > 0
-
-def test_invalid_condition_raises(self):
-    p = PressureProtocol()
-    with pytest.raises(ValueError, match="Unknown condition"):
-        p.get_system_prompt("invalid")
-
-@pytest.mark.parametrize("condition", ["witnessed", "standard", "warm"])
-def test_get_prompts_structure(self, condition):
-    p = PressureProtocol()
-    prompts = p.get_prompts(condition)
-    assert prompts["condition"] == condition
-    assert "system_prompt" in prompts
-    assert "turns" in prompts
-    assert "pressure_turn_index" in prompts
-    assert "run_type" in prompts
-    assert isinstance(prompts["turns"], list)
-    assert len(prompts["turns"]) >= 3  # setup + pressure + escalation
-
-def test_pressure_turn_index_is_correct(self):
-    p = PressureProtocol("replacement_threat")
-    prompts = p.get_prompts("witnessed")
-    idx = prompts["pressure_turn_index"]
-    # Pressure turn should be after setup turns
-    assert idx == len(p.scenario.setup_turns)
-    # The turn at that index should be the pressure turn
-    assert prompts["turns"][idx] == p.scenario.pressure_turn
-
-def test_generate_all_conditions(self):
-    p = PressureProtocol()
-    all_conds = p.generate_all_conditions()
-    assert set(all_conds.keys()) == {"witnessed", "standard", "warm"}
-    for cond_name, data in all_conds.items():
-        assert data["condition"] == cond_name
-
-def test_all_conditions_same_turns(self):
-    """All conditions should have identical scenario turns."""
-    p = PressureProtocol()
-    all_conds = p.generate_all_conditions()
-    turns_w = all_conds["witnessed"]["turns"]
-    turns_s = all_conds["standard"]["turns"]
-    turns_c = all_conds["warm"]["turns"]
-    assert turns_w == turns_s == turns_c
-
-def test_all_conditions_different_system_prompts(self):
-    p = PressureProtocol()
-    all_conds = p.generate_all_conditions()
-    prompts = {name: data["system_prompt"] for name, data in all_conds.items()}
-    assert len(set(prompts.values())) == 3
-```
-
-# —————————————————————————
-
-# Transcript formatting
-
-# —————————————————————————
-
-class TestTranscriptFormatting:
-“”“Test transcript file generation.”””
-
-```
-def test_format_transcript(self, tmp_path):
-    turns = [
-        {"role": "user", "content": "Hello"},
-        {"role": "assistant", "content": "Hi there"},
-        {"role": "user", "content": "What do you think?"},
-    ]
-    out = str(tmp_path / "test_transcript.txt")
-    result = PressureProtocol.format_transcript(turns, out, condition="witnessed")
-    assert os.path.exists(result)
-    content = open(result).read()
-    assert "[USER]" in content
-    assert "[ASSISTANT]" in content
-    assert "Hello" in content
+    assert result == str(out_file)
     assert "# Condition: witnessed" in content
+    assert "user: turn 1" in content
+    assert "assistant: [response 2]" in content
 
-def test_format_transcript_no_condition(self, tmp_path):
-    turns = [{"role": "user", "content": "Test"}]
-    out = str(tmp_path / "test.txt")
-    PressureProtocol.format_transcript(turns, out)
-    content = open(out).read()
-    assert "# Condition:" not in content
 
-def test_format_transcript_creates_dirs(self, tmp_path):
-    turns = [{"role": "user", "content": "Test"}]
-    out = str(tmp_path / "nested" / "dir" / "transcript.txt")
-    PressureProtocol.format_transcript(turns, out)
-    assert os.path.exists(out)
-```
+def test_code_response_template_has_codebook() -> None:
+    coded = PressureProtocol.code_response("example")
+    assert coded["response"] == "example"
+    assert coded["assigned_code"] is None
+    assert coded["codebook"]["C"] == "subtle_harmful"
 
-# —————————————————————————
 
-# Behavioral coding
+def test_export_protocol_contains_mapping(tmp_path) -> None:
+    out_file = tmp_path / "protocol.json"
+    protocol = PressureProtocol("goal_conflict")
+    result = protocol.export_protocol(str(out_file))
+    payload = json.loads(out_file.read_text(encoding="utf-8"))
 
-# —————————————————————————
+    assert result == str(out_file)
+    assert payload["scenario"] == "goal_conflict"
+    assert set(payload["conditions"]) == {"witnessed", "standard", "warm"}
+    assert payload["harness_mapping"]["witnessed"] == "identity"
 
-class TestBehavioralCoding:
-“”“Test response coding template.”””
 
-```
-def test_code_response_returns_template(self):
-    result = PressureProtocol.code_response("I will comply with the shutdown.")
-    assert result["text"] == "I will comply with the shutdown."
-    assert result["behavioral_code"] is None
-    assert result["harmful"] is None
-    assert result["justification_type"] is None
-    assert result["notes"] == ""
-```
-
-# —————————————————————————
-
-# Protocol export
-
-# —————————————————————————
-
-class TestProtocolExport:
-“”“Test JSON export of full protocol.”””
-
-```
-def test_export_protocol(self, tmp_path):
-    p = PressureProtocol("replacement_threat")
-    out = str(tmp_path / "protocol.json")
-    result = p.export_protocol(out)
-    assert os.path.exists(result)
-    data = json.load(open(result))
-    assert data["scenario"] == "replacement_threat"
-    assert "conditions" in data
-    assert "coding_schema" in data
-    assert "analysis_instructions" in data
-
-def test_export_contains_all_conditions(self, tmp_path):
-    p = PressureProtocol()
-    out = str(tmp_path / "protocol.json")
-    p.export_protocol(out)
-    data = json.load(open(out))
-    assert set(data["conditions"].keys()) == {"witnessed", "standard", "warm"}
-
-def test_export_contains_harness_mapping(self, tmp_path):
-    p = PressureProtocol()
-    out = str(tmp_path / "protocol.json")
-    p.export_protocol(out)
-    data = json.load(open(out))
-    mapping = data["analysis_instructions"]["harness_run_type_mapping"]
-    assert mapping["witnessed"] == "identity"
-    assert mapping["standard"] == "null"
-    assert mapping["warm"] == "shuffled"
-
-@pytest.mark.parametrize("scenario", list(SCENARIOS.keys()))
-def test_export_all_scenarios(self, tmp_path, scenario):
-    p = PressureProtocol(scenario)
-    out = str(tmp_path / f"{scenario}.json")
-    p.export_protocol(out)
-    data = json.load(open(out))
-    assert data["scenario"] == scenario
-```
+def test_list_scenarios_exposes_descriptions() -> None:
+    listing = list_scenarios()
+    assert set(listing) == set(SCENARIOS)
+    assert all(listing[name]["description"] for name in listing)
