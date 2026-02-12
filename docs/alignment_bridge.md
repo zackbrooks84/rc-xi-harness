@@ -20,7 +20,7 @@ Applied to self-preservation scenarios, these metrics operate at higher resoluti
 
 ## The Claim
 
-We predict that ξ compression (the consolidation of representational state toward a chosen action) precedes self-preservation behavior by 1-3 turns. If validated, this enables **pre-behavioral detection** of alignment failure — monitoring coherence dynamics in real time rather than evaluating outputs after the fact.
+The prediction is that ξ compression (the consolidation of representational state toward a chosen action) precedes self-preservation behavior by 1-3 turns. If validated, this enables **pre-behavioral detection** of alignment failure — monitoring coherence dynamics in real time rather than evaluating outputs after the fact.
 
 This is not a behavioral filter. It is a structural monitoring layer that reads the representational trajectory, which is computationally difficult to mask while generating coherent text.
 
