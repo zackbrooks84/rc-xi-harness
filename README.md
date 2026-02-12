@@ -40,7 +40,9 @@ python -m harness.analysis.eval_cli \
 
 
 
-Public test harness that approximates epistemic tension **ξ** using text embeddings and tests for recursive identity stabilization.
+
+
+## Public test harness that approximates epistemic tension **ξ** using text embeddings and tests for recursive identity stabilization.
 
 ## Config
 Defined in `harness/config.yaml`:
