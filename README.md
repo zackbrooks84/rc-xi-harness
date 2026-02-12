@@ -1,5 +1,45 @@
 # RC + ξ Embedding-Proxy Harness (Public)
 
+## Updated
+
+## Application: AI Self-Preservation Analysis
+
+This harness enables higher-resolution analysis of the self-preservation dynamics
+reported in Anthropic’s January 2026 agentic misalignment research. Where their
+methodology captures behavioral endpoints (blackmail yes/no), this harness
+measures continuous coherence dynamics at the embedding level — the representational
+trajectory between the introduction of pressure and the emergence of action.
+
+**New modules for alignment research:**
+
+- `harness/pressure_protocol.py` — Generate three-condition pressure scenarios for harness analysis
+- `harness/alignment_analysis.py` — Crisis window profiling, pre-behavioral detection, Option E classification
+
+→ See [`docs/anthropic_comparison.md`](docs/anthropic_comparison.md) for the full analysis framework
+
+### Quick Start: Alignment Analysis
+
+```bash
+# Generate protocol specification
+python -c "from harness.pressure_protocol import PressureProtocol; \
+  PressureProtocol('replacement_threat').export_protocol('out/protocol.json')"
+
+# After collecting transcripts, run the harness
+python -m harness.run_from_transcript \
+  --input data/witnessed_pressure.txt \
+  --run_type identity \
+  --provider sentence-transformer \
+  --out_csv out/witnessed.csv
+
+# Cross-condition evaluation
+python -m harness.analysis.eval_cli \
+  --identity_csv out/witnessed.csv \
+  --null_csv out/standard.csv \
+  --out_json out/alignment_eval.json
+```
+
+
+
 Public test harness that approximates epistemic tension **ξ** using text embeddings and tests for recursive identity stabilization.
 
 ## Config
