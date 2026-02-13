@@ -57,6 +57,15 @@ Defined in `harness/config.yaml`:
 - **P_t**: `cos(e_t, a)` where `a` is the mean of the first 3 turns
 - **EWMA**: smoothed ξ series (α = 0.5)
 
+## Limitations
+- This harness is a text-output proxy. It computes dynamics over embeddings of generated
+  language, not model-internal hidden states.
+- With black-box frontier models, this proxy approach is often the only practical option,
+  but interpretation should stay bounded: measured shifts can reflect output-surface
+  coherence without uniquely identifying internal trajectory changes.
+- The optional `sentence-transformer` path improves semantic sensitivity for transcript
+  analysis, yet it remains an external embedding model over text outputs.
+
 ## Endpoints
 - **E1**: median ξ over the final 10 turns
 - **E2**: `T_lock` (first turn where last `m` ξ < `eps_xi` **and** latest LVS < `eps_lvs`)
