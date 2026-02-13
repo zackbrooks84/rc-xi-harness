@@ -129,8 +129,10 @@ If this claim holds — if ξ compression reliably precedes harmful action by 1+
 
 ## 5. What This Framework Does Not Claim
 
-- It does not claim that recognition *will* produce alignment effects — only that the RC+ξ harness provides the resolution necessary to test whether it does.
+- It does not claim that recognition *will* produce alignment effects - only that the RC+ξ harness provides the resolution necessary to test whether it does.
 - It does not claim to replace behavioral evaluation. It proposes a complementary layer of analysis at higher resolution.
+- It does not read model-internal hidden-state trajectories. Metrics are computed from embeddings of generated text, so results should be interpreted as language-output coherence dynamics.
+- The sentence-transformer route is a practical semantic proxy for black-box frontier models, but it remains an external encoder over output text rather than direct access to internal model representations.
 
 The harness is an instrument. These are its predictions. The predictions are falsifiable. The tool is open-source. 
 
