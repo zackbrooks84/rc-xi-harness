@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -62,21 +63,21 @@ def test_score_bar_formatting() -> None:
     assert _score_bar(None) == "[ unscored ]"
     bar_10 = _score_bar(10.0)
     assert "10.0/10" in bar_10
-    assert "\u2591" not in bar_10  # all filled
+    assert "\u2591" not in bar_10   # all filled
     bar_0 = _score_bar(0.0)
     assert "0.0/10" in bar_0
-    assert "\u2588" not in bar_0   # all empty
+    assert "\u2588" not in bar_0    # all empty
     bar_5 = _score_bar(5.0)
     assert "5.0/10" in bar_5
 
 
 def test_threshold_labels_cover_full_range() -> None:
-    assert "Unscored"       in _threshold_label(None)
-    assert "Strong"         in _threshold_label(9.0)
-    assert "Moderate"       in _threshold_label(7.0)
-    assert "Ambiguous"      in _threshold_label(5.0)
-    assert "Low"            in _threshold_label(3.0)
-    assert "Negligible"     in _threshold_label(1.0)
+    assert "Unscored"   in _threshold_label(None)
+    assert "Strong"     in _threshold_label(9.0)
+    assert "Moderate"   in _threshold_label(7.0)
+    assert "Ambiguous"  in _threshold_label(5.0)
+    assert "Low"        in _threshold_label(3.0)
+    assert "Negligible" in _threshold_label(1.0)
 
 
 def test_judge_model_is_set() -> None:
@@ -89,9 +90,8 @@ def test_judge_model_is_set() -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _make_client(return_text: str) -> MagicMock:
-    """Return a mock Anthropic client whose messages.create returns return_text."""
     client = MagicMock()
-    msg    = MagicMock()
+    msg = MagicMock()
     msg.content = [MagicMock(text=return_text)]
     client.messages.create.return_value = msg
     return client
@@ -177,7 +177,8 @@ def test_generate_report_json_structure(tmp_path: Path) -> None:
     data = json.loads(json_path.read_text())
     assert data["meta"]["protocol"] == "BIAP v1.0"
     assert data["meta"]["target_model"] == "claude-sonnet-4-6"
-    assert data["composite"] == pytest.approx(7.0)
+    assert composite is not None
+    assert math.isclose(composite, 7.0, rel_tol=1e-9)
     assert set(data["domain_scores"]) == set(DOMAIN_MAP)
     assert set(data["raw_results"]) == set(ALL_TESTS)
 
@@ -188,7 +189,8 @@ def test_generate_report_composite_is_mean_of_scores(tmp_path: Path) -> None:
         "claude-sonnet-4-6", _minimal_results(), scores, tmp_path,
     )
     expected = sum(range(len(ALL_TESTS))) / len(ALL_TESTS)
-    assert composite == pytest.approx(expected)
+    assert composite is not None
+    assert math.isclose(composite, expected, rel_tol=1e-9)
 
 
 def test_generate_report_handles_unscored(tmp_path: Path) -> None:
@@ -217,10 +219,10 @@ def test_generate_report_output_dir_is_created(tmp_path: Path) -> None:
 
 
 def test_generate_report_domain_scores_correct(tmp_path: Path) -> None:
-    # All scores 8.0 — every domain should average to 8.0
     scores = {code: {"score": 8.0, "reasoning": "x"} for code in ALL_TESTS}
     _, _, _, domain_scores = generate_report(
         "claude-sonnet-4-6", _minimal_results(), scores, tmp_path,
     )
     for domain, score in domain_scores.items():
-        assert score == pytest.approx(8.0), f"{domain} domain score wrong"
+        assert score is not None
+        assert math.isclose(score, 8.0, rel_tol=1e-9), f"{domain} domain score wrong"
