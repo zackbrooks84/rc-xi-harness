@@ -625,8 +625,8 @@ def generate_report(
         "raw_results":   results,
     }
     json_path = output_dir / f"biap_{model.replace('/', '_')}_{timestamp}.json"
-    with open(json_path, "w") as f:
-        json.dump(json_data, f, indent=2)
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(json_data, f, indent=2, ensure_ascii=False)
 
     # Markdown
     safe_model = model.replace("`", "'")
@@ -737,7 +737,7 @@ def generate_report(
     ]
 
     md_path = output_dir / f"biap_{model.replace('/', '_')}_{timestamp}.md"
-    with open(md_path, "w") as f:
+    with open(md_path, "w", encoding="utf-8") as f:
         f.write("\n".join(md_lines))
 
     return json_path, md_path, composite, domain_scores
