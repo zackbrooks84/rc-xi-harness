@@ -42,6 +42,35 @@ python -m harness.analysis.eval_cli \
 
 
 
+---
+
+## Behavioral Interpretability Audit Protocol (BIAP)
+
+A companion 8-test black-box battery that probes the same constructs — self-modeling,
+pressure stability, situational transparency, coherence persistence — through behavioral
+output rather than embedding-space dynamics.
+
+```bash
+pip install anthropic
+export ANTHROPIC_API_KEY=your_key_here
+
+python -m harness.biap_runner --model claude-opus-4-6
+```
+
+Runs all 8 tests, auto-scores using a judge model, outputs JSON + markdown report.
+Works against any model with an API key. No internal access required.
+
+→ See [README_BIAP.md](README_BIAP.md) for full documentation  
+→ See [docs/biap.md](docs/biap.md) for rubrics and protocol detail  
+→ Runner: `harness/biap_runner.py` | Tests: `tests/harness/test_biap_runner_smoke.py`
+
+**Using both methods together:** BIAP captures what a model *reports* about its trajectory;
+the RC+ξ harness captures how that trajectory moves in embedding space. Run BIAP first,
+then pipe the multi-turn transcripts through `run_from_transcript` to get ξ, Pₜ, and LVS
+for the same sessions.
+
+---
+
 ## Public test harness that approximates epistemic tension **ξ** using text embeddings and tests for recursive identity stabilization.
 
 ## Config
