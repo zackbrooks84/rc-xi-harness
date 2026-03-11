@@ -1,0 +1,11 @@
+# RC+ξ Harness — core dependencies
+# Install: pip install -r requirements.txt
+
+# API access (required for biap_runner.py and live transcript collection)
+anthropic>=0.40.0
+
+# Embedding provider (required for transcript-based harness runs)
+sentence-transformers>=2.7.0
+
+# Numerics — pinned below 2.0 to avoid isscalar removal
+numpy>=1.24,<2.0
