@@ -83,3 +83,21 @@ def test_load_rejects_fortran_order(tmp_path: Path) -> None:
 
     with pytest.raises(NotImplementedError):
         np.load(path)
+
+
+def test_isscalar_identifies_python_scalar_primitives() -> None:
+    """Behavioral: scalar Python primitives return ``True``."""
+
+    assert np.isscalar(1)
+    assert np.isscalar(1.0)
+    assert np.isscalar(True)
+    assert np.isscalar("x")
+    assert np.isscalar(b"x")
+
+
+def test_isscalar_rejects_array_like_values() -> None:
+    """Invariant: array-like values are never treated as scalars."""
+
+    assert not np.isscalar([1, 2, 3])
+    assert not np.isscalar((1, 2, 3))
+    assert not np.isscalar(np.array([1, 2, 3]))

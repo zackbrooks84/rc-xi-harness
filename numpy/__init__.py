@@ -780,6 +780,19 @@ def isfinite(a: Any) -> Union[bool, ndarray]:
     return ndarray(_rec(arr._data))
 
 
+def isscalar(x: Any) -> bool:
+    """Return ``True`` when ``x`` is a scalar value.
+
+    This mirrors the subset of NumPy behavior relied upon by the test suite,
+    where built-in scalar primitives are considered scalars while container
+    types are not.
+    """
+
+    if isinstance(x, ndarray):
+        return x.shape == ()
+    return isinstance(x, (int, float, bool, str, bytes))
+
+
 def linspace(start: float, stop: float, num: int, dtype: Optional[type] = None) -> ndarray:
     if num <= 0:
         raise ValueError("num must be positive")
@@ -1105,6 +1118,7 @@ __all__ = [
     "median",
     "all",
     "isfinite",
+    "isscalar",
     "linspace",
     "expand_dims",
     "save",
