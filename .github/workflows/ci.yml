@@ -30,7 +30,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest anthropic
+          pip install pytest anthropic "numpy<2.0"
 
       - name: Run tests
         run: pytest -q
