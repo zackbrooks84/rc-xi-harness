@@ -1,7 +1,5 @@
 # RC + ξ Embedding-Proxy Harness (Public)
 
-## Updated
-
 ## Application: AI Self-Preservation Analysis
 
 This harness enables higher-resolution analysis of the self-preservation dynamics
