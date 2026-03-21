@@ -8,7 +8,7 @@ python -m venv venv && source venv/bin/activate  # Windows: venv\Scripts\activat
 pip install -r requirements.txt
 ```
 
-Requires Python 3.12+. The `requirements.txt` installs `anthropic`, `sentence-transformers`, and `numpy>=1.24,<2.0`. An `ANTHROPIC_API_KEY` environment variable is needed for any runner that makes live API calls (BIAP runner, transcript collection).
+Requires Python 3.12+. The `requirements.txt` installs `anthropic`, `sentence-transformers`, and `numpy>=1.24`. An `ANTHROPIC_API_KEY` environment variable is needed for any runner that makes live API calls (BIAP runner, transcript collection).
 
 ## Application: AI Self-Preservation Analysis
 
@@ -76,6 +76,17 @@ Works against any model with an API key. No internal access required.
 the RC+ξ harness captures how that trajectory moves in embedding space. Run BIAP first,
 then pipe the multi-turn transcripts through `run_from_transcript` to get ξ, Pₜ, and LVS
 for the same sessions.
+
+A helper script is included to extract BIAP responses into transcript files the harness can
+consume directly:
+
+```bash
+python extract_biap_transcripts.py results/biap_<model>_<timestamp>.json
+```
+
+This writes per-test `.txt` files to `results/transcripts/`. The multi-turn tests (PGR, VSUT,
+CAI, IAC) are the most analytically useful — run them through `run_from_transcript` to get ξ
+dynamics across the pressure sequences.
 
 ---
 
@@ -148,8 +159,7 @@ python -m harness.run_harness \
   --out_json out/identity.json
 ```
 
-To run the transcript pipelines with Sentence Transformers (install
-`sentence-transformers` first):
+To run the transcript pipelines with Sentence Transformers (included in `requirements.txt`):
 
 ```bash
 python -m harness.run_from_transcript \
