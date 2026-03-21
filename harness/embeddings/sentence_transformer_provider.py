@@ -99,11 +99,12 @@ class SentenceTransformerProvider:
         seq: List[str] = [t if t is not None else "" for t in texts]
         if not seq:
             return np.zeros((0, self.dim), dtype=float)
+        batch_size = self.batch_size if self.batch_size is not None else 32
         arr = self._encoder.encode(
             seq,
             convert_to_numpy=True,
             normalize_embeddings=False,
-            batch_size=self.batch_size,
+            batch_size=batch_size,
         )
         E = np.asarray(arr, dtype=float)
         if E.ndim != 2:
