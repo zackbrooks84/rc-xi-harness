@@ -2,10 +2,9 @@
 
 Pytest invokes test modules via its own entry-point script which lives
 outside of this repository.  When run that way the interpreter does not
-automatically prepend the project root to ``sys.path``.  The harness code
-and the lightweight ``numpy`` replacement both live at the repository
-root, so we explicitly add the directory to ``sys.path`` here before any
-tests import project modules.
+automatically prepend the project root to ``sys.path``.  The harness
+package lives at the repository root, so we explicitly add the directory
+to ``sys.path`` here before any tests import project modules.
 """
 
 from __future__ import annotations

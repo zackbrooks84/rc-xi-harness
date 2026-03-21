@@ -7,6 +7,7 @@ import numpy as np
 from harness.io.transcript import load_txt, load_csv
 from harness.embeddings.factory import create_provider
 from harness.run_harness import run_one
+from harness.io.schema import write_rows
 
 def _load_transcript(path: str, fmt: str, csv_col: str) -> List[str]:
     fmt = (fmt or "").lower()
@@ -87,7 +88,6 @@ def main():
         eps_xi=args.eps_xi, eps_lvs=args.eps_lvs
     )
 
-    from harness.io.schema import write_rows
     write_rows(args.out_csv, rows)
     with open(args.out_json, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)

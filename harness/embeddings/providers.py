@@ -26,17 +26,42 @@ class NumpyFileProvider:
             raise ValueError("Embeddings array must be 2D (T, d).")
         return E
 
-# Placeholders to be implemented later
+# ─────────────────────────────────────────────────────────────────────────────
+# PLANNED — NOT YET IMPLEMENTED
+#
+# The providers below are stubs. All validated results in the published study
+# use SentenceTransformerProvider exclusively. Cross-provider replication
+# (OpenAI, Cohere) is a planned next step.
+#
+# Reference: DOI: 10.5281/zenodo.17203755
+# ─────────────────────────────────────────────────────────────────────────────
+
 class OpenAIProvider:
+    """PLANNED — NOT YET IMPLEMENTED.
+
+    Use SentenceTransformerProvider for all current harness runs.
+    See DOI: 10.5281/zenodo.17203755 for validated configuration.
+    """
     def __init__(self, model: str = "text-embedding-3-large"):
         self.model = model
 
     def embed(self, texts: List[str]) -> np.ndarray:
-        raise NotImplementedError("Wire this to the OpenAI SDK later.")
+        raise NotImplementedError(
+            "OpenAIProvider is not yet implemented. "
+            "Use SentenceTransformerProvider instead."
+        )
 
 class CohereProvider:
+    """PLANNED — NOT YET IMPLEMENTED.
+
+    Use SentenceTransformerProvider for all current harness runs.
+    See DOI: 10.5281/zenodo.17203755 for validated configuration.
+    """
     def __init__(self, model: str = "embed-english-v3.0"):
         self.model = model
 
     def embed(self, texts: List[str]) -> np.ndarray:
-        raise NotImplementedError("Wire this to the Cohere SDK later.")
+        raise NotImplementedError(
+            "CohereProvider is not yet implemented. "
+            "Use SentenceTransformerProvider instead."
+        )

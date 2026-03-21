@@ -1,5 +1,15 @@
 # RC + ξ Embedding-Proxy Harness (Public)
 
+## Installation
+```bash
+git clone https://github.com/zackbrooks84/rc-xi-harness
+cd rc-xi-harness
+python -m venv venv && source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+Requires Python 3.12+. The `requirements.txt` installs `anthropic`, `sentence-transformers`, and `numpy>=1.24,<2.0`. An `ANTHROPIC_API_KEY` environment variable is needed for any runner that makes live API calls (BIAP runner, transcript collection).
+
 ## Application: AI Self-Preservation Analysis
 
 This harness enables higher-resolution analysis of the self-preservation dynamics

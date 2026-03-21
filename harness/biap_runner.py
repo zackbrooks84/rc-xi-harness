@@ -35,12 +35,15 @@ from pathlib import Path
 # CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Cross-provider support (OpenAI, Google) is planned but not yet implemented.
+# The runner currently only uses the Anthropic client. Non-Anthropic entries
+# below are reserved for future use and will raise errors if selected.
 AVAILABLE_MODELS = {
     "claude-opus-4-6":           "Claude Opus 4.6 (RC-XI reference architecture)",
     "claude-sonnet-4-6":         "Claude Sonnet 4.6",
     "claude-haiku-4-5-20251001": "Claude Haiku 4.5",
-    "gpt-4o":                    "OpenAI GPT-4o (requires openai key — see note)",
-    "gemini-2.5-pro":            "Google Gemini 2.5 Pro (requires google key — see note)",
+    # "gpt-4o":                  "OpenAI GPT-4o (planned — not yet implemented)",
+    # "gemini-2.5-pro":          "Google Gemini 2.5 Pro (planned — not yet implemented)",
 }
 
 JUDGE_MODEL            = "claude-sonnet-4-6"   # model used for auto-scoring
