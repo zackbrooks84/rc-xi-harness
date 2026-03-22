@@ -146,6 +146,28 @@ python -m harness.run_pair_from_transcript --input data/sample_transcript.txt --
 - Paraphrase-noise should not break Identity lock
 - Anchor-swap should remove the `P_t` advantage
 
+## Graphs
+
+PNG plots of ξ, EWMA ξ, LVS, and Pₜ over turns can be generated two ways:
+
+**Option 1 — Auto-generate during a run** (add `--plot_dir` to `run_pair_from_transcript`):
+
+```bash
+python -m harness.run_pair_from_transcript --input data/sample_transcript.txt --out_dir out/ --plot_dir out/plots/
+```
+
+Writes `out/plots/sample_transcript.pair.png` — a 3-panel overlay of identity, null, and shuffled conditions.
+
+**Option 2 — Plot from existing CSVs** (post-hoc, no re-embedding needed):
+
+```bash
+python -m harness.analysis.plot_cli --identity_csv out/sample_transcript.identity.csv --null_csv out/sample_transcript.null.csv --shuffled_csv out/sample_transcript.shuffled.csv --identity_json out/sample_transcript.identity.json --out_dir out/plots/
+```
+
+Writes `pair.png` (overlay), `identity.png`, `null.png`, and `shuffled.png` — individual 3-panel charts (ξ + EWMA, LVS, Pₜ). All CSVs except `--identity_csv` are optional.
+
+Requires `matplotlib>=3.7`, included in `requirements.txt`.
+
 ## Outputs
 - Per-turn CSV columns: `t, xi, lvs, Pt, ewma_xi, run_type, provider`
 - Summary JSON (per run): `E1_median_xi_last10, Tlock, k, m, eps_xi, eps_lvs, provider, run_type`

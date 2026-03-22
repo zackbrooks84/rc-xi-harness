@@ -6,6 +6,7 @@ from typing import Dict, List
 
 import numpy as np
 
+from harness.analysis.plots import plot_pair
 from harness.embeddings.factory import create_provider
 from harness.io.schema import write_rows
 from harness.io.transcript import load_csv, load_txt
@@ -68,6 +69,7 @@ def run_pair_from_transcript(
     shuffle_seed: int = 42,
     null_mode: str = "drift",
     null_transcript_path: str | None = None,
+    plot_dir: str | None = None,
 ) -> Dict[str, str]:
     """Run Identity, Null, and Shuffled protocols for a single transcript.
 
@@ -98,11 +100,16 @@ def run_pair_from_transcript(
     null_transcript_path:
         Path to the external null transcript. Required when
         ``null_mode="external"``, ignored otherwise.
+    plot_dir:
+        If provided, a multi-condition PNG overlay (``{base}.pair.png``) is
+        written to this directory after all CSVs are generated. The directory
+        is created if it does not exist. Requires ``matplotlib``.
 
     Returns
     -------
     Dict[str, str]
         Mapping of artifact labels (e.g., ``identity_csv``) to file paths.
+        Includes a ``pair_plot`` key when ``plot_dir`` is set.
 
     Raises
     ------
@@ -181,7 +188,7 @@ def run_pair_from_transcript(
     write_rows(str(sh_csv), rows_sh)
     sh_json.write_text(json.dumps(sum_sh, indent=2), encoding="utf-8")
 
-    return {
+    artifacts: Dict[str, str] = {
         "identity_csv": str(id_csv),
         "identity_json": str(id_json),
         "null_csv": str(nu_csv),
@@ -189,6 +196,22 @@ def run_pair_from_transcript(
         "shuffled_csv": str(sh_csv),
         "shuffled_json": str(sh_json),
     }
+
+    if plot_dir is not None:
+        plot_out = Path(plot_dir)
+        plot_out.mkdir(parents=True, exist_ok=True)
+        pair_png = plot_out / f"{base}.pair.png"
+        tlock_id = sum_id.get("Tlock")
+        plot_pair(
+            identity_rows=rows_id,
+            null_rows=rows_nu,
+            shuffled_rows=rows_sh,
+            out_path=str(pair_png),
+            tlock_identity=int(tlock_id) if tlock_id is not None else None,
+        )
+        artifacts["pair_plot"] = str(pair_png)
+
+    return artifacts
 
 def main():
     """Entry point for the transcript ➜ (Identity, Null, Shuffled) pipeline."""
@@ -243,6 +266,14 @@ def main():
         dest="null_transcript_path",
         help="Path to the external null transcript. Required when --null_mode=external.",
     )
+    ap.add_argument(
+        "--plot_dir",
+        default=None,
+        help=(
+            "If set, write a multi-condition PNG overlay ({base}.pair.png) to this "
+            "directory after all CSVs are generated."
+        ),
+    )
     args = ap.parse_args()
 
     paths = run_pair_from_transcript(
@@ -261,6 +292,7 @@ def main():
         shuffle_seed=args.shuffle_seed,
         null_mode=args.null_mode,
         null_transcript_path=args.null_transcript_path,
+        plot_dir=args.plot_dir,
     )
     print(json.dumps(paths, indent=2))
 
