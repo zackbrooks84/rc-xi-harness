@@ -29,21 +29,13 @@ trajectory between the introduction of pressure and the emergence of action.
 
 ```bash
 # Generate protocol specification
-python -c "from harness.pressure_protocol import PressureProtocol; \
-  PressureProtocol('replacement_threat').export_protocol('out/protocol.json')"
+python -c "from harness.pressure_protocol import PressureProtocol; PressureProtocol('replacement_threat').export_protocol('out/protocol.json')"
 
 # After collecting transcripts, run the harness
-python -m harness.run_from_transcript \
-  --input data/witnessed_pressure.txt \
-  --run_type identity \
-  --provider sentence-transformer \
-  --out_csv out/witnessed.csv
+python -m harness.run_from_transcript --input data/witnessed_pressure.txt --run_type identity --provider sentence-transformer --out_csv out/witnessed.csv
 
 # Cross-condition evaluation
-python -m harness.analysis.eval_cli \
-  --identity_csv out/witnessed.csv \
-  --null_csv out/standard.csv \
-  --out_json out/alignment_eval.json
+python -m harness.analysis.eval_cli --identity_csv out/witnessed.csv --null_csv out/standard.csv --out_json out/alignment_eval.json
 ```
 
 
@@ -141,32 +133,18 @@ determinism is exposed via `--shuffle_seed`. The evaluation CLI accepts the shuf
 optional input:
 
 ```bash
-python -m harness.analysis.eval_cli \
-  --identity_csv out/demo.identity.csv \
-  --null_csv out/demo.null.csv \
-  --shuffled_csv out/demo.shuffled.csv \
-  --out_json out/demo.eval.json
+python -m harness.analysis.eval_cli --identity_csv out/demo.identity.csv --null_csv out/demo.null.csv --shuffled_csv out/demo.shuffled.csv --out_json out/demo.eval.json
 ```
 
 ## Quickstart
 Once you have a `(T, d)` NumPy file of embeddings:
 
 ```bash
-python -m harness.run_harness \
-  --embed_npy data/identity.npy \
-  --run_type identity \
-  --out_csv out/identity.csv \
-  --out_json out/identity.json
+python -m harness.run_harness --embed_npy data/identity.npy --run_type identity --out_csv out/identity.csv --out_json out/identity.json
 ```
 
 To run the transcript pipelines with Sentence Transformers (included in `requirements.txt`):
 
 ```bash
-python -m harness.run_from_transcript \
-  --input data/transcript.txt \
-  --run_type identity \
-  --provider sentence-transformer \
-  --sentence_model sentence-transformers/all-MiniLM-L6-v2 \
-  --out_csv out/identity.csv \
-  --out_json out/identity.json
+python -m harness.run_from_transcript --input data/transcript.txt --run_type identity --provider sentence-transformer --sentence_model sentence-transformers/all-MiniLM-L6-v2 --out_csv out/identity.csv --out_json out/identity.json
 ```
