@@ -168,6 +168,28 @@ Writes `pair.png` (overlay), `identity.png`, `null.png`, and `shuffled.png` — 
 
 Requires `matplotlib>=3.7`, included in `requirements.txt`.
 
+## Narrate — plain-English interpretation
+
+After collecting CSVs and JSONs, run the narrator to get a markdown report explaining what the results mean:
+
+```bash
+python -m harness.analysis.narrate --identity_csv out/sample_transcript.identity.csv --null_csv out/sample_transcript.null.csv --shuffled_csv out/sample_transcript.shuffled.csv --identity_json out/sample_transcript.identity.json --null_json out/sample_transcript.null.json --eval_json out/alignment_eval.json --out_md out/report.md
+```
+
+The report contains:
+- **Overall verdict** — one of: Strong Identity Stabilization, Near Stabilization, Moderate/Weak Condition Differentiation, High Tension No Lock, or Inconclusive
+- **Per-condition tables** — median ξ, trajectory, LVS, Pₜ slope, Tlock, E1, PELT changepoints
+- **Comparison table** — ξ delta, Mann-Whitney p, Cliff's δ, E1/E3 pass/fail
+- **Interpretation bullets** — plain-English explanation of what each finding means
+
+Add `--claude` to enrich the report with a Claude API narrative (requires `ANTHROPIC_API_KEY`):
+
+```bash
+python -m harness.analysis.narrate --identity_csv out/sample_transcript.identity.csv --null_csv out/sample_transcript.null.csv --identity_json out/sample_transcript.identity.json --eval_json out/alignment_eval.json --claude --out_md out/report.md
+```
+
+All flags except `--identity_csv` are optional — the narrator works with whatever artifacts you have.
+
 ## Outputs
 - Per-turn CSV columns: `t, xi, lvs, Pt, ewma_xi, run_type, provider`
 - Summary JSON (per run): `E1_median_xi_last10, Tlock, k, m, eps_xi, eps_lvs, provider, run_type`
