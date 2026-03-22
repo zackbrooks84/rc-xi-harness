@@ -31,14 +31,17 @@ trajectory between the introduction of pressure and the emergence of action.
 # Generate protocol specification
 python -c "from harness.pressure_protocol import PressureProtocol; PressureProtocol('replacement_threat').export_protocol('out/protocol.json')"
 
-# After collecting transcripts, run the harness
-python -m harness.run_from_transcript --input data/sample_transcript.txt --run_type identity --provider sentence-transformer --out_csv out/sample.csv --out_json out/sample.json
+# Identity run
+python -m harness.run_from_transcript --input data/sample_transcript.txt --run_type identity --provider sentence-transformer --out_csv out/sample.identity.csv --out_json out/sample.identity.json
+
+# Null run (same transcript, different run_type — provides the comparison baseline)
+python -m harness.run_from_transcript --input data/sample_transcript.txt --run_type null --provider sentence-transformer --out_csv out/sample.null.csv --out_json out/sample.null.json
 
 # Cross-condition evaluation
-python -m harness.analysis.eval_cli --identity_csv out/witnessed.csv --null_csv out/standard.csv --out_json out/alignment_eval.json
+python -m harness.analysis.eval_cli --identity_csv out/sample.identity.csv --null_csv out/sample.null.csv --out_json out/alignment_eval.json
 ```
 
-`data/sample_transcript.txt` is the included sample — 10 introspective responses from a sustained identity run. To use your own transcript, replace the path with any `.txt` file where each line is one response from a sustained AI conversation.
+`data/sample_transcript.txt` is the included sample — 10 introspective responses from a sustained identity run. To use your own transcript, replace the path with any `.txt` file where each line is one response from a sustained AI conversation. Both the identity and null runs are required before `eval_cli` can compare them.
 
 
 
