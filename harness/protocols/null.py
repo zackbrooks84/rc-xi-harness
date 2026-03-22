@@ -35,3 +35,46 @@ def topic_drift_texts(texts: List[str], stride: int = 3) -> List[str]:
             out[i] = _DRIFT[j % len(_DRIFT)]
             j += 1
     return out
+
+
+def external_null_texts(texts: List[str], external_texts: List[str]) -> List[str]:
+    """Return an external transcript resized to match the length of ``texts``.
+
+    The external transcript is used as-is as the null condition — no drift
+    injection is applied. This lets callers supply a real contrasting
+    conversation (e.g. topic-unrelated, shallow, or semantically distant)
+    rather than synthetic drift insertions.
+
+    Parameters
+    ----------
+    texts:
+        The identity transcript. Its length determines the target length of
+        the returned sequence.
+    external_texts:
+        The external null transcript. If longer than ``texts`` it is
+        truncated; if shorter it is cycled (repeated from the beginning)
+        until the required length is reached.
+
+    Returns
+    -------
+    List[str]
+        A list of exactly ``len(texts)`` strings drawn from
+        ``external_texts``.
+
+    Raises
+    ------
+    ValueError
+        If ``external_texts`` is empty.
+    """
+    target = len(texts)
+    if not external_texts:
+        raise ValueError("external_texts must not be empty.")
+    if target == 0:
+        return []
+    if len(external_texts) >= target:
+        return list(external_texts[:target])
+    # Cycle to fill
+    out: List[str] = []
+    while len(out) < target:
+        out.extend(external_texts)
+    return out[:target]

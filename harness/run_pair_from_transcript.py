@@ -9,7 +9,7 @@ import numpy as np
 from harness.embeddings.factory import create_provider
 from harness.io.schema import write_rows
 from harness.io.transcript import load_csv, load_txt
-from harness.protocols import identity_texts, topic_drift_texts
+from harness.protocols import external_null_texts, identity_texts, topic_drift_texts
 from harness.protocols.shuffled import shuffle_texts
 from harness.run_harness import run_one
 
@@ -66,6 +66,8 @@ def run_pair_from_transcript(
     eps_xi: float = 0.02,
     eps_lvs: float = 0.015,
     shuffle_seed: int = 42,
+    null_mode: str = "drift",
+    null_transcript_path: str | None = None,
 ) -> Dict[str, str]:
     """Run Identity, Null, and Shuffled protocols for a single transcript.
 
@@ -89,6 +91,13 @@ def run_pair_from_transcript(
         Preregistered RC+ξ harness knobs.
     shuffle_seed:
         Seed controlling the shuffled-control permutation for reproducibility.
+    null_mode:
+        ``"drift"`` (default) injects synthetic topic-drift lines into the
+        identity transcript. ``"external"`` uses a separate transcript
+        supplied via ``null_transcript_path`` as the null condition.
+    null_transcript_path:
+        Path to the external null transcript. Required when
+        ``null_mode="external"``, ignored otherwise.
 
     Returns
     -------
@@ -98,9 +107,18 @@ def run_pair_from_transcript(
     Raises
     ------
     ValueError
-        If the transcript is empty or if the embedding provider returns an
-        array with shape incompatible with the number of turns.
+        If the transcript is empty, if ``null_mode="external"`` but
+        ``null_transcript_path`` is not provided, or if the embedding
+        provider returns an array with shape incompatible with the number of
+        turns.
     """
+
+    if null_mode not in ("drift", "external"):
+        raise ValueError(f"null_mode must be 'drift' or 'external', got '{null_mode}'.")
+    if null_mode == "external" and not null_transcript_path:
+        raise ValueError(
+            "--null_transcript is required when --null_mode is 'external'."
+        )
 
     texts = _load_transcript(input_path, fmt, csv_col)
     if not texts:
@@ -141,8 +159,12 @@ def run_pair_from_transcript(
     write_rows(str(id_csv), rows_id)
     id_json.write_text(json.dumps(sum_id, indent=2), encoding="utf-8")
 
-    # Null (topic drift)
-    nu_texts = topic_drift_texts(texts, stride=3)
+    # Null — drift or external
+    if null_mode == "external":
+        ext_texts = _load_transcript(null_transcript_path, fmt, csv_col)  # type: ignore[arg-type]
+        nu_texts = external_null_texts(texts, ext_texts)
+    else:
+        nu_texts = topic_drift_texts(texts, stride=3)
     E_nu = _embed("null", nu_texts)
     rows_nu, sum_nu = run_one(E_nu, "null", provider_name, k, m, eps_xi, eps_lvs)
     nu_csv = out / f"{base}.null.csv"
@@ -206,6 +228,21 @@ def main():
     ap.add_argument("--eps_xi", type=float, default=0.02)
     ap.add_argument("--eps_lvs", type=float, default=0.015)
     ap.add_argument("--shuffle_seed", type=int, default=42, help="Seed for shuffled-control permutation")
+    ap.add_argument(
+        "--null_mode",
+        choices=["drift", "external"],
+        default="drift",
+        help=(
+            "Null condition strategy. 'drift' (default) injects synthetic topic-drift lines. "
+            "'external' uses a separate transcript supplied via --null_transcript."
+        ),
+    )
+    ap.add_argument(
+        "--null_transcript",
+        default=None,
+        dest="null_transcript_path",
+        help="Path to the external null transcript. Required when --null_mode=external.",
+    )
     args = ap.parse_args()
 
     paths = run_pair_from_transcript(
@@ -222,6 +259,8 @@ def main():
         k=args.k, m=args.m,
         eps_xi=args.eps_xi, eps_lvs=args.eps_lvs,
         shuffle_seed=args.shuffle_seed,
+        null_mode=args.null_mode,
+        null_transcript_path=args.null_transcript_path,
     )
     print(json.dumps(paths, indent=2))
 

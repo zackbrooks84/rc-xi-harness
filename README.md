@@ -122,6 +122,25 @@ Defined in `harness/config.yaml`:
 - **Null**: topic drift every 2–3 turns to prevent attractor
 - **Shuffled**: permute Identity replies to break temporal recursion
 
+## Null conditions
+
+The null run provides a baseline that should not produce a lock signature. Two strategies are available via `--null_mode`:
+
+| Mode | Flag | When to use |
+|------|------|-------------|
+| `drift` (default) | _(no extra flag needed)_ | Synthetic baseline. Every 3rd line is replaced with an unrelated drift sentence drawn from a deterministic catalog. Fast, reproducible, no extra data required. |
+| `external` | `--null_mode external --null_transcript <path>` | Real-world baseline. Supply any `.txt` transcript whose content is semantically unrelated to the identity run (e.g. a mundane task conversation, news summaries, unrelated Q&A). The external transcript is trimmed or cycled to match the identity length. |
+
+**Drift null** is appropriate for most ablation work and reproduces the pre-registered results. **External null** is better when you want to compare against a real contrasting conversation rather than synthetic noise, or when the drift catalog topics are too close to your identity transcript's domain.
+
+```bash
+# Drift null (default — no extra flags needed)
+python -m harness.run_pair_from_transcript --input data/sample_transcript.txt --out_dir out/
+
+# External null
+python -m harness.run_pair_from_transcript --input data/sample_transcript.txt --null_mode external --null_transcript data/my_baseline.txt --out_dir out/
+```
+
 ## Ablations
 - Shuffled should destroy lock
 - Paraphrase-noise should not break Identity lock
