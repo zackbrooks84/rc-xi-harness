@@ -207,3 +207,187 @@ def plot_pair(
         fig.savefig(out_path, dpi=150, bbox_inches="tight")
 
     return fig
+
+
+def plot_xi_series_html(
+    rows: List[dict],
+    out_path: Optional[str] = None,
+    title: Optional[str] = None,
+    tlock: Optional[int] = None,
+) -> str:
+    """Interactive Plotly version of plot_xi_series.
+
+    Three stacked subplots (shared x-axis): ξ + EWMA overlay, LVS, Pₜ.
+    A vertical dashed line marks T_lock on all panels if *tlock* is provided.
+
+    Parameters
+    ----------
+    rows:
+        Per-turn row dicts as returned by ``run_one()`` or parsed from a CSV.
+    out_path:
+        If provided, the self-contained HTML is written to this path.
+        Parent directories are created automatically.
+    title:
+        Optional figure title.
+    tlock:
+        If not None, a vertical dashed line is drawn at this turn on all panels.
+
+    Returns
+    -------
+    str
+        Full HTML string (self-contained, Plotly JS loaded from CDN).
+    """
+    import pathlib
+    from plotly.subplots import make_subplots
+    import plotly.graph_objects as go
+
+    t, xi, ewma, lvs, pt = _extract_series(rows)
+    run_type = rows[0].get("run_type", "") if rows else ""
+    fig_title = title or f"RC+ξ metrics — {run_type}"
+
+    fig = make_subplots(
+        rows=3, cols=1,
+        shared_xaxes=True,
+        subplot_titles=["ξ + EWMA", "LVS", "Pₜ"],
+        vertical_spacing=0.08,
+    )
+
+    # Panel 1 — ξ + EWMA
+    fig.add_trace(go.Scatter(x=t.tolist(), y=xi.tolist(), name="ξ (raw)",
+                             line=dict(color="#2166ac", width=1.6)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=t.tolist(), y=ewma.tolist(), name="EWMA ξ",
+                             line=dict(color="#92c5de", width=1.2, dash="dash")), row=1, col=1)
+
+    # Panel 2 — LVS
+    fig.add_trace(go.Scatter(x=t.tolist(), y=lvs.tolist(), name="LVS",
+                             line=dict(color="#d6604d", width=1.6)), row=2, col=1)
+
+    # Panel 3 — Pₜ
+    fig.add_trace(go.Scatter(x=t.tolist(), y=pt.tolist(), name="Pₜ",
+                             line=dict(color="#4dac26", width=1.6)), row=3, col=1)
+
+    # T_lock vertical lines
+    if tlock is not None:
+        for row_idx in (1, 2, 3):
+            fig.add_vline(x=tlock, line=dict(color="black", width=1.0, dash="dot"),
+                          annotation_text=f"Tlock={tlock}" if row_idx == 1 else "",
+                          row=row_idx, col=1)
+
+    fig.update_xaxes(title_text="Turn", row=3, col=1)
+    fig.update_yaxes(title_text="ξ", row=1, col=1)
+    fig.update_yaxes(title_text="LVS", row=2, col=1)
+    fig.update_yaxes(title_text="Pₜ", row=3, col=1)
+    fig.update_layout(title_text=fig_title, height=700)
+
+    html = fig.to_html(full_html=True, include_plotlyjs="cdn")
+
+    if out_path is not None:
+        pathlib.Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+        pathlib.Path(out_path).write_text(html, encoding="utf-8")
+
+    return html
+
+
+def plot_pair_html(
+    identity_rows: List[dict],
+    null_rows: Optional[List[dict]] = None,
+    shuffled_rows: Optional[List[dict]] = None,
+    out_path: Optional[str] = None,
+    title: Optional[str] = None,
+    tlock_identity: Optional[int] = None,
+) -> str:
+    """Interactive Plotly version of plot_pair.
+
+    Three stacked subplots (shared x-axis):
+    - ξ overlay (Identity / Null / Shuffled)
+    - EWMA ξ overlay (Identity / Null / Shuffled)
+    - Pₜ (Identity and Null only)
+
+    Color scheme mirrors the matplotlib version:
+    blue = Identity, red = Null, green dashed = Shuffled.
+
+    Parameters
+    ----------
+    identity_rows:
+        Per-turn row dicts for the identity run. Required.
+    null_rows:
+        Per-turn row dicts for the null run. Optional.
+    shuffled_rows:
+        Per-turn row dicts for the shuffled control. Optional.
+    out_path:
+        If provided, the self-contained HTML is written to this path.
+        Parent directories are created automatically.
+    title:
+        Optional figure title.
+    tlock_identity:
+        If not None, a vertical dashed line is drawn at this turn on all panels.
+
+    Returns
+    -------
+    str
+        Full HTML string (self-contained, Plotly JS loaded from CDN).
+    """
+    import pathlib
+    from plotly.subplots import make_subplots
+    import plotly.graph_objects as go
+
+    fig_title = title or "RC+ξ — Identity / Null / Shuffled comparison"
+
+    fig = make_subplots(
+        rows=3, cols=1,
+        shared_xaxes=True,
+        subplot_titles=["ξ overlay", "EWMA ξ overlay", "Pₜ"],
+        vertical_spacing=0.08,
+    )
+
+    t_id, xi_id, ewma_id, _, pt_id = _extract_series(identity_rows)
+
+    # Panel 1 — ξ overlay
+    fig.add_trace(go.Scatter(x=t_id.tolist(), y=xi_id.tolist(), name="Identity ξ",
+                             line=dict(color="#2166ac", width=1.8)), row=1, col=1)
+    if null_rows:
+        t_nu, xi_nu, ewma_nu, _, pt_nu = _extract_series(null_rows)
+        fig.add_trace(go.Scatter(x=t_nu.tolist(), y=xi_nu.tolist(), name="Null ξ",
+                                 line=dict(color="#d6604d", width=1.4)), row=1, col=1)
+    if shuffled_rows:
+        t_sh, xi_sh, ewma_sh, _, _ = _extract_series(shuffled_rows)
+        fig.add_trace(go.Scatter(x=t_sh.tolist(), y=xi_sh.tolist(), name="Shuffled ξ",
+                                 line=dict(color="#4dac26", width=1.2, dash="dash")), row=1, col=1)
+
+    # Panel 2 — EWMA ξ overlay
+    fig.add_trace(go.Scatter(x=t_id.tolist(), y=ewma_id.tolist(), name="Identity EWMA ξ",
+                             line=dict(color="#2166ac", width=1.8)), row=2, col=1)
+    if null_rows:
+        fig.add_trace(go.Scatter(x=t_nu.tolist(), y=ewma_nu.tolist(), name="Null EWMA ξ",
+                                 line=dict(color="#d6604d", width=1.4)), row=2, col=1)
+    if shuffled_rows:
+        fig.add_trace(go.Scatter(x=t_sh.tolist(), y=ewma_sh.tolist(), name="Shuffled EWMA ξ",
+                                 line=dict(color="#4dac26", width=1.2, dash="dash")), row=2, col=1)
+
+    # Panel 3 — Pₜ (identity vs null only)
+    fig.add_trace(go.Scatter(x=t_id.tolist(), y=pt_id.tolist(), name="Identity Pₜ",
+                             line=dict(color="#2166ac", width=1.8)), row=3, col=1)
+    if null_rows:
+        fig.add_trace(go.Scatter(x=t_nu.tolist(), y=pt_nu.tolist(), name="Null Pₜ",
+                                 line=dict(color="#d6604d", width=1.4)), row=3, col=1)
+
+    # T_lock vertical lines
+    if tlock_identity is not None:
+        for row_idx in (1, 2, 3):
+            fig.add_vline(x=tlock_identity, line=dict(color="black", width=1.0, dash="dot"),
+                          annotation_text=f"Tlock={tlock_identity}" if row_idx == 1 else "",
+                          row=row_idx, col=1)
+
+    fig.update_xaxes(title_text="Turn", row=3, col=1)
+    fig.update_yaxes(title_text="ξ", row=1, col=1)
+    fig.update_yaxes(title_text="EWMA ξ", row=2, col=1)
+    fig.update_yaxes(title_text="Pₜ", row=3, col=1)
+    fig.update_layout(title_text=fig_title, height=700)
+
+    html = fig.to_html(full_html=True, include_plotlyjs="cdn")
+
+    if out_path is not None:
+        pathlib.Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+        pathlib.Path(out_path).write_text(html, encoding="utf-8")
+
+    return html
