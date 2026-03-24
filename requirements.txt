@@ -3,6 +3,7 @@
 
 # API access (required for biap_runner.py and live transcript collection)
 anthropic>=0.40.0
+openai>=1.0.0          # required for OpenRouter provider (--provider openrouter)
 
 # Embedding provider (required for transcript-based harness runs)
 sentence-transformers>=2.7.0

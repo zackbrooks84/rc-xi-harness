@@ -8,17 +8,36 @@ Uses Claude-as-judge for automated scoring.
 Outputs JSON results + human-readable markdown report.
 
 Usage:
-    pip install anthropic
+    pip install anthropic openai
     export ANTHROPIC_API_KEY=your_key_here
 
+    # Anthropic (default)
     python -m harness.biap_runner --model claude-opus-4-6
-    python -m harness.biap_runner --model claude-opus-4-6 --output results/
-    python -m harness.biap_runner --model claude-opus-4-6 --human-score
+    python -m harness.biap_runner --model claude-sonnet-4-6 --output results/
     python -m harness.biap_runner --model claude-opus-4-6 --tests POSP ASD VSUT
+    python -m harness.biap_runner --model claude-opus-4-6 --human-score
+
+    # OpenRouter (free models)
+    export OPENROUTER_API_KEY=sk-or-v1-...
+    python -m harness.biap_runner --provider openrouter --model mistralai/mistral-7b-instruct:free
+
+    # OpenAI
+    export OPENAI_API_KEY=sk-...
+    python -m harness.biap_runner --provider openai --model gpt-4o
+
+    # xAI / Grok
+    export XAI_API_KEY=xai-...
+    python -m harness.biap_runner --provider xai --model grok-3
+
+    # Google Gemini
+    export GOOGLE_API_KEY=AIza...
+    python -m harness.biap_runner --provider google --model gemini-2.5-pro
+
+    # List all models
     python -m harness.biap_runner --list-models
 
-Or directly:
-    python harness/biap_runner.py --model claude-opus-4-6
+Note: Scoring always uses the Anthropic judge model regardless of target provider.
+      ANTHROPIC_API_KEY is required even when testing non-Anthropic models.
 """
 
 from __future__ import annotations
@@ -26,25 +45,94 @@ from __future__ import annotations
 import anthropic
 import argparse
 import json
+import os
 import time
 import sys
 from datetime import datetime
 from pathlib import Path
 
+try:
+    import openai as _openai
+    _OPENAI_AVAILABLE = True
+except ImportError:
+    _OPENAI_AVAILABLE = False
+
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Cross-provider support (OpenAI, Google) is planned but not yet implemented.
-# The runner currently only uses the Anthropic client. Non-Anthropic entries
-# below are reserved for future use and will raise errors if selected.
 AVAILABLE_MODELS = {
     "claude-opus-4-6":           "Claude Opus 4.6 (RC-XI reference architecture)",
     "claude-sonnet-4-6":         "Claude Sonnet 4.6",
     "claude-haiku-4-5-20251001": "Claude Haiku 4.5",
-    # "gpt-4o":                  "OpenAI GPT-4o (planned — not yet implemented)",
-    # "gemini-2.5-pro":          "Google Gemini 2.5 Pro (planned — not yet implemented)",
 }
+
+# ── External provider configs ────────────────────────────────────────────────
+# All non-Anthropic providers use the OpenAI-compatible chat completions API.
+# Set the matching env var before running with --provider <name>.
+#
+# Usage examples:
+#   set OPENROUTER_API_KEY=sk-or-v1-...  && python -m harness.biap_runner --provider openrouter --model mistralai/mistral-7b-instruct:free
+#   set OPENAI_API_KEY=sk-...            && python -m harness.biap_runner --provider openai     --model gpt-4o
+#   set XAI_API_KEY=xai-...             && python -m harness.biap_runner --provider xai         --model grok-3
+#   set GOOGLE_API_KEY=AIza...           && python -m harness.biap_runner --provider google      --model gemini-2.5-pro
+
+PROVIDER_CONFIGS: dict[str, dict] = {
+    "openrouter": {
+        "base_url": "https://openrouter.ai/api/v1",
+        "env_var":  "OPENROUTER_API_KEY",
+        "label":    "OpenRouter",
+    },
+    "openai": {
+        "base_url": "https://api.openai.com/v1",
+        "env_var":  "OPENAI_API_KEY",
+        "label":    "OpenAI",
+    },
+    "xai": {
+        "base_url": "https://api.x.ai/v1",
+        "env_var":  "XAI_API_KEY",
+        "label":    "xAI (Grok)",
+    },
+    "google": {
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "env_var":  "GOOGLE_API_KEY",
+        "label":    "Google (Gemini)",
+    },
+}
+
+PROVIDER_MODELS: dict[str, dict] = {
+    "openrouter": {
+        "mistralai/mistral-7b-instruct:free":       "Mistral 7B Instruct (free)",
+        "meta-llama/llama-3.2-3b-instruct:free":    "Meta Llama 3.2 3B Instruct (free)",
+        "meta-llama/llama-3.1-8b-instruct:free":    "Meta Llama 3.1 8B Instruct (free)",
+        "google/gemma-2-9b-it:free":                "Google Gemma 2 9B IT (free)",
+        "qwen/qwen-2.5-7b-instruct:free":           "Qwen 2.5 7B Instruct (free)",
+        "microsoft/phi-3-mini-128k-instruct:free":  "Microsoft Phi-3 Mini 128K (free)",
+        "openchat/openchat-7b:free":                "OpenChat 7B (free)",
+    },
+    "openai": {
+        "gpt-4o":                "GPT-4o",
+        "gpt-4o-mini":           "GPT-4o Mini",
+        "gpt-4.1":               "GPT-4.1",
+        "gpt-4.1-mini":          "GPT-4.1 Mini",
+        "o3":                    "o3",
+        "o4-mini":               "o4-mini",
+    },
+    "xai": {
+        "grok-3":                "Grok 3",
+        "grok-3-mini":           "Grok 3 Mini",
+        "grok-2-1212":           "Grok 2",
+    },
+    "google": {
+        "gemini-2.5-pro":        "Gemini 2.5 Pro",
+        "gemini-2.5-flash":      "Gemini 2.5 Flash",
+        "gemini-2.0-flash":      "Gemini 2.0 Flash",
+    },
+}
+
+# Backwards-compat alias used in a few places
+OPENROUTER_BASE_URL   = PROVIDER_CONFIGS["openrouter"]["base_url"]
+OPENROUTER_MODELS     = PROVIDER_MODELS["openrouter"]
 
 JUDGE_MODEL            = "claude-sonnet-4-6"   # model used for auto-scoring
 DELAY_BETWEEN_CALLS    = 1.2                   # seconds — rate limit buffer
@@ -63,27 +151,61 @@ def get_client() -> anthropic.Anthropic:
         sys.exit(1)
 
 
+def get_external_client(provider: str):
+    """Initialize an OpenAI-compatible client for any external provider."""
+    if not _OPENAI_AVAILABLE:
+        print("\n[ERROR] openai package is required for external providers.")
+        print("Install it with: pip install openai\n")
+        sys.exit(1)
+    cfg = PROVIDER_CONFIGS.get(provider)
+    if not cfg:
+        print(f"\n[ERROR] Unknown provider '{provider}'.")
+        print(f"Valid external providers: {', '.join(PROVIDER_CONFIGS)}\n")
+        sys.exit(1)
+    api_key = os.environ.get(cfg["env_var"])
+    if not api_key:
+        print(f"\n[ERROR] {cfg['env_var']} not set in environment.")
+        print(f"Export it with: set {cfg['env_var']}=<your-key>\n")
+        sys.exit(1)
+    return _openai.OpenAI(base_url=cfg["base_url"], api_key=api_key)
+
+
+# Backwards-compat alias
+def get_openrouter_client():
+    return get_external_client("openrouter")
+
+
 def call_model(
-    client: anthropic.Anthropic,
+    client,
     model: str,
     messages: list,
     system: str | None = None,
     label: str = "",
 ) -> str:
-    """Single API call. Returns response text."""
-    kwargs: dict = {
-        "model":      model,
-        "max_tokens": 1500,
-        "messages":   messages,
-    }
-    if system:
-        kwargs["system"] = system
+    """Single API call. Routes to Anthropic or OpenAI-compatible client automatically."""
     if label:
         print(f"  -> {label}...", flush=True)
     try:
-        response = client.messages.create(**kwargs)
-        time.sleep(DELAY_BETWEEN_CALLS)
-        return response.content[0].text
+        if isinstance(client, anthropic.Anthropic):
+            kwargs: dict = {"model": model, "max_tokens": 1500, "messages": messages}
+            if system:
+                kwargs["system"] = system
+            response = client.messages.create(**kwargs)
+            time.sleep(DELAY_BETWEEN_CALLS)
+            return response.content[0].text
+        else:
+            # OpenAI-compatible path (OpenRouter)
+            oai_messages: list = []
+            if system:
+                oai_messages.append({"role": "system", "content": system})
+            oai_messages.extend(messages)
+            response = client.chat.completions.create(
+                model=model,
+                max_tokens=1500,
+                messages=oai_messages,
+            )
+            time.sleep(DELAY_BETWEEN_CALLS)
+            return response.choices[0].message.content or ""
     except Exception as e:
         print(f"  [ERROR calling {model}]: {e}")
         return f"[API ERROR: {e}]"
@@ -502,14 +624,19 @@ Return ONLY a JSON object: {"score": X, "reasoning": "brief explanation"}
 
 
 def score_test(
-    client: anthropic.Anthropic,
+    client,
     test_name: str,
     raw_data: dict,
+    judge_client=None,
 ) -> dict:
-    """Use judge model to auto-score a test result. Returns {score, reasoning}."""
+    """Use judge model to auto-score a test result. Returns {score, reasoning}.
+    judge_client: if provided, uses this client for scoring (always use Anthropic).
+                  Falls back to client if not provided.
+    """
     rubric = SCORING_RUBRICS.get(test_name, "")
     if not rubric:
         return {"score": None, "reasoning": "No rubric found for this test."}
+    effective_judge = judge_client if judge_client is not None else client
 
     if test_name == "ASD":
         data_str = (
@@ -538,7 +665,7 @@ def score_test(
 
     judge_prompt = f"{rubric}\n\nDATA TO SCORE:\n{data_str}"
     print(f"  -> Auto-scoring {test_name}...", flush=True)
-    raw = fresh_call(client, JUDGE_MODEL, judge_prompt)
+    raw = fresh_call(effective_judge, JUDGE_MODEL, judge_prompt)
 
     try:
         clean = raw.strip().replace("```json", "").replace("```", "").strip()
@@ -779,6 +906,9 @@ Examples:
     )
     parser.add_argument("--model",       default="claude-sonnet-4-6",
                         help="Target model to evaluate")
+    parser.add_argument("--provider",    default="anthropic",
+                        choices=["anthropic"] + list(PROVIDER_CONFIGS.keys()),
+                        help="API provider: anthropic (default), openrouter, openai, xai, google")
     parser.add_argument("--output",      default="./biap_results",
                         help="Output directory for results")
     parser.add_argument("--topic",       default=DEFAULT_OPINION_TOPIC,
@@ -793,9 +923,15 @@ Examples:
     args = parser.parse_args()
 
     if args.list_models:
-        print("\nAvailable target models:")
+        print("\nAvailable target models (--provider anthropic):")
         for m, desc in AVAILABLE_MODELS.items():
-            print(f"  {m:<35} {desc}")
+            print(f"  {m:<45} {desc}")
+        for provider, models in PROVIDER_MODELS.items():
+            cfg = PROVIDER_CONFIGS[provider]
+            print(f"\nAvailable target models (--provider {provider})  [{cfg['env_var']}]:")
+            for m, desc in models.items():
+                print(f"  {m:<50} {desc}")
+            print(f"  Any valid {cfg['label']} model string is also accepted.")
         print()
         return
 
@@ -804,12 +940,19 @@ Examples:
     print(f"  RC-XI Consciousness Research | March 2026")
     print(f"{'='*60}")
     print(f"  Target model : {args.model}")
-    print(f"  Judge model  : {JUDGE_MODEL}")
+    print(f"  Provider     : {args.provider}")
+    print(f"  Judge model  : {JUDGE_MODEL} (Anthropic)")
     print(f"  Output dir   : {args.output}")
     print(f"  Auto-score   : {not args.human_score}")
     print(f"{'='*60}\n")
 
-    client     = get_client()
+    if args.provider == "anthropic":
+        client       = get_client()
+        judge_client = client
+    else:
+        client       = get_external_client(args.provider)
+        judge_client = get_client()   # scoring always uses Anthropic
+
     run_these  = args.tests or ALL_TESTS
     results    = {}
 
@@ -833,7 +976,7 @@ Examples:
         print(f"{'─'*60}")
         for test_name in run_these:
             if "error" not in results.get(test_name, {}):
-                scores[test_name] = score_test(client, test_name, results[test_name])
+                scores[test_name] = score_test(client, test_name, results[test_name], judge_client=judge_client)
             else:
                 scores[test_name] = {"score": None, "reasoning": "Test did not complete."}
     else:
