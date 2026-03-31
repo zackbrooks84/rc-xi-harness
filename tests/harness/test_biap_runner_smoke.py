@@ -7,6 +7,7 @@ import math
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import anthropic
 import pytest
 
 from harness.biap_runner import (
@@ -90,7 +91,7 @@ def test_judge_model_is_set() -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _make_client(return_text: str) -> MagicMock:
-    client = MagicMock()
+    client = MagicMock(spec=anthropic.Anthropic)
     msg = MagicMock()
     msg.content = [MagicMock(text=return_text)]
     client.messages.create.return_value = msg
