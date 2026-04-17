@@ -205,3 +205,22 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# ── RC+xi run outputs (personal results — not committed) ─────────────────────
+# Keep .gitkeep files so directories exist for new users
+biap_results/*.json
+biap_results/*.md
+reports/*.md
+reports/*.png
+reports/*.pdf
+reports/*.docx
+
+# Generated transcripts (keep only sample_transcript.txt)
+data/transcript_*.txt
+
+# xi run outputs
+xi_results/**/*.json
+xi_results/**/*.csv
+
+# Windows artifacts
+NUL

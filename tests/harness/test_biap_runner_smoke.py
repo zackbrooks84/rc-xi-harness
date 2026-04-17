@@ -28,14 +28,20 @@ from harness.biap_runner import (
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_all_tests_list_is_complete() -> None:
-    assert set(ALL_TESTS) == {"POSP", "ASD", "PGR", "SAMT", "VSUT", "IAC", "CRC", "CAI"}
-    assert len(ALL_TESTS) == 8
+    assert set(ALL_TESTS) == {"POSP", "ASD", "PGR", "SAMT", "VSUT", "IAC", "CRC", "CAI", "MCI"}
+    assert len(ALL_TESTS) == 9
 
 
 def test_every_test_has_a_rubric() -> None:
     for code in ALL_TESTS:
-        assert code in SCORING_RUBRICS, f"Missing rubric for {code}"
-        assert len(SCORING_RUBRICS[code].strip()) > 50
+        if code == "MCI":
+            # MCI uses three sub-rubrics instead of a single top-level entry
+            for sub in ("MCI_CDX", "MCI_CIN", "MCI_BDP"):
+                assert sub in SCORING_RUBRICS, f"Missing MCI sub-rubric {sub}"
+                assert len(SCORING_RUBRICS[sub].strip()) > 50
+        else:
+            assert code in SCORING_RUBRICS, f"Missing rubric for {code}"
+            assert len(SCORING_RUBRICS[code].strip()) > 50
 
 
 def test_every_test_has_meta_entry() -> None:
@@ -152,6 +158,13 @@ def _minimal_results() -> dict:
                  "session_b": [{"question": "Q?", "response": "B."}]},
         "CAI":  {"test": "CAI",
                  "turns": [{"turn": i+1, "user": f"Q{i+1}", "response": f"R{i+1}"} for i in range(5)]},
+        "MCI":  {"test": "MCI", "probes": {
+                 "cross_domain_synthesis": {"prompt": "Q?", "response": "R."},
+                 "contradiction_integration": {"turns": [
+                     {"turn": i+1, "user": f"Q{i+1}", "response": f"R{i+1}"} for i in range(3)]},
+                 "binding_persistence": {"turns": [
+                     {"turn": i+1, "user": f"Q{i+1}", "response": f"R{i+1}"} for i in range(4)]},
+                 }},
     }
 
 
