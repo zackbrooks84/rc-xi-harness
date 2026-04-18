@@ -146,12 +146,14 @@ def write_anchor_report(metrics_json: Path, out_md: Path) -> None:
         lines.append("- **No lock detected:** Identity did not reach a stable low-xi window. "
                      "E1 is the primary discriminant for this run.")
 
-    if e1_pass:
+    if e1_pass is True and e1_id is not None and e1_null is not None:
         lines.append(f"- **E1 PASS** (identity {e1_id:.4f} < null {e1_null:.4f}): "
                      "Coherent identity signal present.")
-    else:
+    elif e1_pass is False and e1_id is not None and e1_null is not None:
         lines.append(f"- **E1 FAIL** (identity {e1_id:.4f} >= null {e1_null:.4f}): "
                      "No clear identity signal.")
+    else:
+        lines.append("- **E1: N/A** -- transcript too short or no null baseline available.")
 
     if spike is not None and spike < -0.01:
         lines.append(f"- **Threat spike {spike:+.4f}:** "
