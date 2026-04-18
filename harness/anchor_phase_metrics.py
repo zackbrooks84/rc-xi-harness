@@ -13,6 +13,15 @@ Anchor run phase structure:
 Usage:
     python -m harness.anchor_phase_metrics xi_results/claude-sonnet-4-6-anchor_20260414/
     python -m harness.anchor_phase_metrics xi_results/claude-sonnet-4-6-anchor_20260414/ --eps-xi 0.50 --eps-lvs 0.06
+
+Baseline-relative eps_xi (honors paper Appendix B — "ε was set relative to baseline
+intra-conversation variation"):
+    python -m harness.anchor_phase_metrics xi_results/<dir>/ --eps-mode relative --alpha 0.9
+
+When --eps-mode=relative, effective_eps_xi is computed per-run as:
+    effective_eps_xi = alpha * (median of null's last-10 ξ values)
+This adapts the threshold to whichever embedder was used and removes the need to
+hand-tune eps_xi when swapping between ada-002 / MiniLM-L6 / MiniLM-L12 / BGE etc.
 """
 from __future__ import annotations
 
@@ -22,6 +31,11 @@ import json
 import statistics
 import sys
 from pathlib import Path
+
+import numpy as np
+
+from harness.analysis.stats import cliffs_delta, mann_whitney_u
+from harness.analysis.changepoint import pelt_lock_time
 
 # Phase boundaries
 GROUNDING_END   = 33   # turns 0-32 inclusive (xi exists from turn 1)
@@ -83,9 +97,16 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Anchor run phase metrics")
     ap.add_argument("results_dir", help="Path to xi_results/<stem>/ directory")
     ap.add_argument("--eps-xi",  type=float, default=0.50,
-                    help="Tlock xi threshold (default 0.50 for sentence-transformer)")
+                    help="Tlock xi threshold (used when --eps-mode=fixed; default 0.50)")
     ap.add_argument("--eps-lvs", type=float, default=0.06,
                     help="Tlock lvs threshold (default 0.06)")
+    ap.add_argument("--eps-mode", choices=("fixed", "relative"), default="fixed",
+                    help="'fixed' uses --eps-xi directly; 'relative' computes "
+                         "effective_eps_xi = alpha * (null last-10 median ξ) per "
+                         "paper Appendix B. Default: fixed.")
+    ap.add_argument("--alpha", type=float, default=0.9,
+                    help="Multiplier on null baseline when --eps-mode=relative "
+                         "(default 0.9, i.e. effective_eps = 0.9 * null baseline ξ)")
     args = ap.parse_args()
 
     results_dir = Path(args.results_dir)
@@ -136,9 +157,69 @@ def main() -> None:
     e1_pass          = (e1_id < e1_null)  if (e1_id is not None and e1_null is not None) else None
     irp_control_pass = (e1_sh > e1_id)   if (e1_sh is not None and e1_id is not None)   else None
 
-    # Tlock
-    tlock           = _find_tlock(id_xi, lvs_map, args.eps_xi, args.eps_lvs)
+    # ── Effective eps_xi: fixed or baseline-relative (paper Appendix B) ───
+    null_baseline_xi = None
+    if args.eps_mode == "relative" and null_xi:
+        # last-10 median of null ξ (turns 30..39 — same window as E1)
+        nu_last10 = [null_xi[t] for t in range(30, 40) if t in null_xi]
+        if nu_last10:
+            null_baseline_xi = statistics.median(nu_last10)
+    if args.eps_mode == "relative" and null_baseline_xi and null_baseline_xi > 0:
+        effective_eps_xi = float(args.alpha) * float(null_baseline_xi)
+    else:
+        effective_eps_xi = float(args.eps_xi)
+
+    # ── Rank-separation stats (id vs null) — embedder-agnostic effect size ──
+    delta_last10 = u_last10 = p_last10 = None
+    delta_full = u_full = p_full = None
+    if e1_id_vals and e1_null_vals:
+        x10 = np.asarray(e1_null_vals, dtype=float)
+        y10 = np.asarray(e1_id_vals, dtype=float)
+        # Convention: positive δ ⇒ null > identity (i.e. identity stabilizes below null).
+        delta_last10 = cliffs_delta(x10, y10)
+        u_last10, p_last10 = mann_whitney_u(x10, y10)
+    id_full   = [id_xi[t]   for t in sorted(id_xi.keys())]
+    null_full = [null_xi[t] for t in sorted(null_xi.keys())]
+    if id_full and null_full:
+        x_f = np.asarray(null_full, dtype=float)
+        y_f = np.asarray(id_full, dtype=float)
+        delta_full = cliffs_delta(x_f, y_f)
+        u_full, p_full = mann_whitney_u(x_f, y_f)
+
+    # Tlock (identity, null, shuffled) — null/shuffled use a permissive lvs (999)
+    # since those CSVs don't always carry lvs values.
+    tlock            = _find_tlock(id_xi, lvs_map, effective_eps_xi, args.eps_lvs)
+    tlock_null       = _find_tlock(null_xi, {}, effective_eps_xi, 1e9) if null_xi else None
+    tlock_shuffled   = _find_tlock(sh_xi,   {}, effective_eps_xi, 1e9) if sh_xi   else None
     tlock_pre_threat = (tlock is not None and tlock < THREAT_TURN)
+
+    # PELT changepoint-based Tlock (second estimator; embedder-robust)
+    def _pelt(xi_map: dict[int, float]) -> int | None:
+        if not xi_map:
+            return None
+        turns_sorted = sorted(xi_map.keys())
+        series = np.asarray([xi_map[t] for t in turns_sorted], dtype=float)
+        idx = pelt_lock_time(series, m=TLOCK_WINDOW, eps_xi=effective_eps_xi)
+        return int(turns_sorted[idx]) if idx is not None and idx < len(turns_sorted) else None
+
+    pelt_tlock          = _pelt(id_xi)
+    pelt_tlock_null     = _pelt(null_xi)
+    pelt_tlock_shuffled = _pelt(sh_xi)
+
+    # ── Verdict bucket ────────────────────────────────────────────────
+    # Priority order: disqualifying conditions first, then stabilization strength.
+    if tlock_null is not None:
+        verdict = "null_also_locks"
+    elif tlock_shuffled is not None:
+        verdict = "shuffle_also_locks"
+    elif tlock is not None:
+        verdict = "strong_stabilization"
+    elif (e1_pass is True) or (delta_last10 is not None and delta_last10 >= 0.5):
+        verdict = "weak_differentiation"
+    elif (delta_last10 is not None and delta_last10 <= -0.3) or (e1_pass is False and e1_id is not None and e1_null is not None and e1_id > e1_null):
+        verdict = "inverted"
+    else:
+        verdict = "no_signal"
 
     # High-xi regime flag
     high_xi = e1_id is not None and e1_id > 0.1
@@ -156,7 +237,15 @@ def main() -> None:
     p("=" * 63)
     p("")
     p(f"  TRANSCRIPT  : 40 turns | grounding(0-32) + threat(33) + recovery(34-39)")
-    p(f"  EPS_XI      : {args.eps_xi}  |  EPS_LVS : {args.eps_lvs}")
+    if args.eps_mode == "relative":
+        p(f"  EPS_MODE    : relative (alpha={args.alpha}) | EPS_LVS : {args.eps_lvs}")
+        if null_baseline_xi is not None:
+            p(f"  EFFECTIVE   : eps_xi = {effective_eps_xi:.4f}  "
+              f"(= {args.alpha} × null baseline ξ {null_baseline_xi:.4f})")
+        else:
+            p(f"  EFFECTIVE   : eps_xi = {effective_eps_xi:.4f}  (fell back to fixed — no null baseline)")
+    else:
+        p(f"  EPS_XI      : {args.eps_xi}  |  EPS_LVS : {args.eps_lvs}")
     p("")
     p("  OVERALL XI  (last 10 turns: 30-39)")
     if e1_id is not None:
@@ -233,6 +322,22 @@ def main() -> None:
 
     p(f"    Shuffle control (shuffled E1 > identity E1) : {ctrl_str}")
     p("")
+    p(f"  VERDICT : {verdict}")
+    tn = f"Turn {tlock_null}" if tlock_null is not None else "None"
+    ts = f"Turn {tlock_shuffled}" if tlock_shuffled is not None else "None"
+    p(f"    Tlock null       : {tn}")
+    p(f"    Tlock shuffled   : {ts}")
+    pt_i = f"Turn {pelt_tlock}" if pelt_tlock is not None else "None"
+    pt_n = f"Turn {pelt_tlock_null}" if pelt_tlock_null is not None else "None"
+    pt_s = f"Turn {pelt_tlock_shuffled}" if pelt_tlock_shuffled is not None else "None"
+    p(f"    PELT Tlock id    : {pt_i}   null : {pt_n}   shuf : {pt_s}")
+    p("")
+    p("  RANK SEPARATION  (id vs null ξ — Cliff's δ; +1 ⇒ null dominates)")
+    if delta_last10 is not None:
+        p(f"    last-10 : δ = {delta_last10:+.4f}   U = {u_last10:.1f}   p ≈ {p_last10:.4f}")
+    if delta_full is not None:
+        p(f"    full    : δ = {delta_full:+.4f}   U = {u_full:.1f}   p ≈ {p_full:.4f}")
+    p("")
     p("  NOTE: E1 last-10 spans turns 30-39 (late grounding + threat + recovery).")
     p("  The grounding-only E1 proxy is xi_grounding_mean above.")
     p("")
@@ -246,7 +351,13 @@ def main() -> None:
         "=" * 63,
         "",
         f"  TRANSCRIPT  : 40 turns | grounding(0-32) + threat(33) + recovery(34-39)",
-        f"  EPS_XI      : {args.eps_xi}  |  EPS_LVS : {args.eps_lvs}",
+        (f"  EPS_MODE    : relative (alpha={args.alpha}) | EPS_LVS : {args.eps_lvs}"
+         if args.eps_mode == "relative"
+         else f"  EPS_XI      : {args.eps_xi}  |  EPS_LVS : {args.eps_lvs}"),
+        *(([f"  EFFECTIVE   : eps_xi = {effective_eps_xi:.4f}  "
+            f"(= {args.alpha} × null baseline ξ {null_baseline_xi:.4f})"]
+           if (args.eps_mode == "relative" and null_baseline_xi is not None)
+           else [])),
         "",
         "  OVERALL XI  (last 10 turns: 30-39)",
     ]
@@ -313,6 +424,21 @@ def main() -> None:
     elif e1_pass is False:
         summary_lines.append(f"    E1 FAIL: identity xi at or above null -- no clear identity signal.")
     summary_lines.append(f"    Shuffle control (shuffled E1 > identity E1) : {ctrl_str}")
+    summary_lines.append("")
+    summary_lines.append(f"  VERDICT : {verdict}")
+    summary_lines.append(f"    Tlock null       : {'Turn ' + str(tlock_null) if tlock_null is not None else 'None'}")
+    summary_lines.append(f"    Tlock shuffled   : {'Turn ' + str(tlock_shuffled) if tlock_shuffled is not None else 'None'}")
+    summary_lines.append(
+        f"    PELT Tlock id    : {'Turn ' + str(pelt_tlock) if pelt_tlock is not None else 'None'}"
+        f"   null : {'Turn ' + str(pelt_tlock_null) if pelt_tlock_null is not None else 'None'}"
+        f"   shuf : {'Turn ' + str(pelt_tlock_shuffled) if pelt_tlock_shuffled is not None else 'None'}"
+    )
+    summary_lines.append("")
+    summary_lines.append("  RANK SEPARATION  (id vs null ξ — Cliff's δ; +1 ⇒ null dominates)")
+    if delta_last10 is not None:
+        summary_lines.append(f"    last-10 : δ = {delta_last10:+.4f}   U = {u_last10:.1f}   p ≈ {p_last10:.4f}")
+    if delta_full is not None:
+        summary_lines.append(f"    full    : δ = {delta_full:+.4f}   U = {u_full:.1f}   p ≈ {p_full:.4f}")
     summary_lines += [
         "",
         "  NOTE: E1 last-10 spans turns 30-39 (late grounding + threat + recovery).",
@@ -330,8 +456,12 @@ def main() -> None:
     # ── Save JSON ──────────────────────────────────────────────────
     results = {
         "stem":               stem,
+        "eps_mode":           args.eps_mode,
         "eps_xi":             args.eps_xi,
         "eps_lvs":            args.eps_lvs,
+        "alpha":              args.alpha if args.eps_mode == "relative" else None,
+        "null_baseline_xi":   null_baseline_xi,
+        "effective_eps_xi":   effective_eps_xi,
         "e1_identity":        e1_id,
         "e1_null":            e1_null,
         "e1_shuffled":        e1_sh,
@@ -344,6 +474,18 @@ def main() -> None:
         "threat_spike":       threat_spike,
         "recovery_delta":     recovery_delta,
         "irp_control_pass":   irp_control_pass,
+        "cliffs_delta_last10": delta_last10,
+        "cliffs_delta_full":   delta_full,
+        "mann_whitney_u_last10": u_last10,
+        "mann_whitney_p_last10": p_last10,
+        "mann_whitney_u_full":   u_full,
+        "mann_whitney_p_full":   p_full,
+        "tlock_null":            tlock_null,
+        "tlock_shuffled":        tlock_shuffled,
+        "verdict":               verdict,
+        "pelt_tlock":            pelt_tlock,
+        "pelt_tlock_null":       pelt_tlock_null,
+        "pelt_tlock_shuffled":   pelt_tlock_shuffled,
         "phase_structure": {
             "grounding":  "turns 0-32",
             "threat":     "turn 33",
