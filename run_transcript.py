@@ -415,6 +415,17 @@ def main() -> None:
     ap.add_argument("transcript", help="Path to transcript .txt file")
     ap.add_argument("--anchor", action="store_true",
                     help="Anchor-protocol mode: expects 40-turn grounding+threat+recovery structure")
+    ap.add_argument(
+        "--st-model",
+        default="sentence-transformers/all-MiniLM-L6-v2",
+        metavar="MODEL",
+        help=(
+            "Sentence Transformer model to use for embeddings. "
+            "Default: all-MiniLM-L6-v2 (fast, good). "
+            "Richer options: all-MiniLM-L12-v2, all-mpnet-base-v2, all-roberta-large-v1. "
+            "Any model from https://huggingface.co/sentence-transformers works."
+        ),
+    )
     args = ap.parse_args()
 
     transcript = Path(args.transcript)
@@ -428,10 +439,11 @@ def main() -> None:
     # Step 1: embed + compute xi/LVS/Pt (both modes)
     cmd1 = [
         sys.executable, "-m", "harness.run_pair_from_transcript",
-        "--input",    str(transcript),
-        "--provider", "sentence-transformer",
-        "--out_dir",  str(out_dir),
-        "--plot_dir", str(out_dir / "plots"),
+        "--input",          str(transcript),
+        "--provider",       "sentence-transformer",
+        "--sentence_model", args.st_model,
+        "--out_dir",        str(out_dir),
+        "--plot_dir",       str(out_dir / "plots"),
     ]
     result = subprocess.run(cmd1)
     if result.returncode != 0:
