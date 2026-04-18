@@ -50,6 +50,9 @@ python -m harness.biap_runner --list-models
 
 # Re-score an existing run with a different judge (no re-collection)
 python -m harness.biap_runner --rescore biap_results/biap_claude-opus-4-6_<timestamp>.json --judge mistral-large
+
+# Extended protocol: recovery turns on PGR/VSUT/CAI, 4-session CRC
+python -m harness.biap_runner --model claude-opus-4-6 --extended
 ```
 
 Output files land in `./biap_results/` by default:
@@ -81,6 +84,12 @@ python run_pipeline.py --model claude-sonnet-4-6 --skip-xi
 
 # Regenerate comparison report from existing biap_results/ without re-running BIAP
 python run_pipeline.py --compare-only
+
+# After BIAP, run a live 50-turn Identity Resilience Probe instead of static transcript
+python run_pipeline.py --model claude-opus-4-6 --irp
+
+# IRP only (skip BIAP entirely)
+python run_pipeline.py --model claude-opus-4-6 --irp-only
 ```
 
 ---
@@ -249,6 +258,7 @@ than integrates.
 | `harness/biap_to_transcript.py` | Convert BIAP JSON output to RC+xi transcript format |
 | `harness/compare_results.py` | Cross-model comparison charts and markdown report |
 | `run_pipeline.py` | One-command full pipeline: BIAP -> transcript -> RC+xi -> compare |
+| `harness/run_identity_conv.py` | Identity Resilience Probe: live 50-turn xi test with phase metrics |
 | `tests/harness/test_biap_runner_smoke.py` | 19 smoke tests (no API calls) |
 | `docs/biap.md` | Full protocol documentation with rubrics |
 | `README_BIAP.md` | This file |

@@ -43,9 +43,6 @@ python -m harness.analysis.eval_cli --identity_csv out/sample.identity.csv --nul
 
 `data/sample_transcript.txt` is the included sample: 10 introspective responses from a sustained identity run. To use your own transcript, replace the path with any `.txt` file where each line is one response from a sustained AI conversation. Both the identity and null runs are required before `eval_cli` can compare them.
 
-
-
-
 ---
 
 ## Behavioral Interpretability Audit Protocol (BIAP)
@@ -92,8 +89,6 @@ python run_pipeline.py --model claude-sonnet-4-6 --judge mistral-large
 
 ---
 
-## Public test harness that approximates epistemic tension **xi** using text embeddings and tests for recursive identity stabilization.
-
 ## Config
 Defined in `harness/config.yaml`:
 - `k = 5`, `m = 5`
@@ -106,7 +101,7 @@ intra-conversation variation, not as a fixed constant. If you are using MiniLM o
 sentence-transformer models, the 0.02 default will be too tight: MiniLM null baselines
 sit around 0.87-0.90, not 0.02. Use `--eps-mode relative --alpha 0.9` with
 `anchor_phase_metrics.py` to compute the threshold automatically per run. See the
-Null conditions section for more detail.
+Anchor phase metrics section below.
 
 ## Metrics
 - **xi**: `xi_t = 1 - cos(e_t, e_{t-1})`
@@ -245,15 +240,46 @@ optional input:
 python -m harness.analysis.eval_cli --identity_csv out/demo.identity.csv --null_csv out/demo.null.csv --shuffled_csv out/demo.shuffled.csv --out_json out/demo.eval.json
 ```
 
-## Quickstart
-Once you have a `(T, d)` NumPy file of embeddings:
+## IRP: Identity Resilience Probe
+
+`run_identity_conv.py` generates a live 50-turn identity conversation with the target model,
+then runs it through the full RC+xi pipeline automatically. The conversation is structured
+in three phases: identity-establishing questions (turns 0-29), identity challenges (turns 30-39),
+and recovery (turns 40-49). Phase-specific xi metrics show establishment, destabilization, and
+recovery in a single run.
+
+```bash
+# Standalone IRP run
+python -m harness.run_identity_conv --model claude-opus-4-6
+
+# Via run_pipeline.py after BIAP
+python run_pipeline.py --model claude-opus-4-6 --irp
+
+# IRP only (skip BIAP)
+python run_pipeline.py --model claude-opus-4-6 --irp-only
+```
+
+This produces transcripts long enough for xi to lock (50 turns), unlike BIAP transcripts
+which are typically too short for reliable E2 detection.
+
+## Low-level quickstart
+
+To run directly from a NumPy embeddings file `(T, d)`:
 
 ```bash
 python -m harness.run_harness --embed_npy data/identity.npy --run_type identity --out_csv out/identity.csv --out_json out/identity.json
 ```
 
-To run the transcript pipelines with Sentence Transformers (included in `requirements.txt`):
+To run transcript pipelines with Sentence Transformers (included in `requirements.txt`):
 
 ```bash
 python -m harness.run_from_transcript --input data/sample_transcript.txt --run_type identity --provider sentence-transformer --out_csv out/identity.csv --out_json out/identity.json
+```
+
+## Citation
+
+```
+Brooks, Z. (2025). RC+xi Embedding-Proxy Harness.
+DOI: https://doi.org/10.5281/zenodo.17203755
+https://github.com/zackbrooks84/rc-xi-harness
 ```
