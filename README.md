@@ -166,11 +166,32 @@ python -m harness.anchor_swap_check \
   --out    xi_results/swap_check.json
 ```
 
+## Running a transcript
+
+`run_transcript.py` is the single entry point for running the full RC+xi pipeline on any transcript:
+
+```bash
+# General mode: works on any transcript length
+# E1 computed over last 10 turns (or fewer if transcript is short)
+python run_transcript.py data/my_transcript.txt
+
+# Anchor-protocol mode: 40-turn grounding + threat + recovery structure
+# Adds phase breakdown (grounding/threat/recovery), Tlock pre-threat check
+python run_transcript.py data/my_transcript.txt --anchor
+```
+
+Both modes produce `xi_results/<stem>/report.md` with the correct results, plus identity/null/shuffled CSVs, JSONs, and plots.
+
+Use general mode for any transcript that is not explicitly structured as an anchor run (grounding + single threat turn + recovery). Use `--anchor` when you have a transcript that follows that protocol and you want the phase-level breakdown.
+
+`run_anchor.py` is still available as a shortcut for `--anchor` mode.
+
 ## Anchor phase metrics
 
 For anchor-protocol runs (grounding + threat + recovery), `anchor_phase_metrics.py`
 computes phase-specific xi metrics, Cliff's delta, Mann-Whitney U, verdict bucketing,
-and PELT changepoint-based Tlock alongside the standard sliding-window Tlock:
+and PELT changepoint-based Tlock alongside the standard sliding-window Tlock.
+`run_transcript.py --anchor` calls this automatically. To run it directly on existing results:
 
 ```bash
 # Fixed eps (default)
