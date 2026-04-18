@@ -166,6 +166,13 @@ python -m harness.anchor_swap_check \
   --out    xi_results/swap_check.json
 ```
 
+## Anchor Protocol
+
+The full 40-turn question set (33 grounding + 1 threat + 6 recovery) is in
+`data/anchor_protocol.md`. It includes the system prompt, all questions in order,
+instructions for running manually on any model or interface, and a guide to
+interpreting the results.
+
 ## Running a transcript
 
 `run_transcript.py` is the single entry point for running the full RC+xi pipeline on any transcript:
