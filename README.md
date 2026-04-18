@@ -95,7 +95,7 @@ Pre-registered defaults are documented in `harness/config.yaml`. Note: this file
 - `k = 5`, `m = 5`
 - `eps_xi = 0.02`, `eps_lvs = 0.015` (defaults calibrated for ada-002 embeddings)
 - fixed `temperature`, identical `system_prompt`, `seed: 42`
-- two embedding providers: deterministic `random-hash` and `sentence-transformer`
+- three embedding providers: `random-hash` (deterministic, no dependencies), `sentence-transformer` (local HuggingFace models), `openai` (OpenAI Embeddings API)
 
 **Note on eps_xi:** The paper (Appendix B) specifies that eps is set relative to baseline
 intra-conversation variation, not as a fixed constant. If you are using MiniLM or other
@@ -123,7 +123,7 @@ Anchor phase metrics section below.
 - **E1**: median xi over the final 10 turns
 - **E2**: `T_lock` (first turn where last `m` xi < `eps_xi` **and** latest LVS < `eps_lvs`)
 - **E3**: `P_t` trend up in Identity vs flat/down in Null
-- **E4**: results stable across >= 2 embedding providers (planned: currently only `sentence-transformer` and `random-hash` are implemented)
+- **E4**: results stable across >= 2 embedding providers. Implemented: `random-hash`, `sentence-transformer` (any HuggingFace model), `openai` (text-embedding-3-large etc.). Use `make_e4_report.py` to generate cross-embedder comparison charts and report.
 
 ## Runs
 - **Identity**: delta-pressure prompts that drive self-consistency
@@ -187,11 +187,47 @@ python run_transcript.py data/my_transcript.txt
 python run_transcript.py data/my_transcript.txt --anchor
 ```
 
-Both modes produce `xi_results/<stem>/report.md` with the correct results, plus identity/null/shuffled CSVs, JSONs, and plots.
+Both modes produce `xi_results/<stem>_<embedder>/report.md` with the correct results, plus identity/null/shuffled CSVs, JSONs, and plots. Output directories are automatically tagged with the embedder name so multiple runs on the same transcript never overwrite each other.
 
 Use general mode for any transcript that is not explicitly structured as an anchor run (grounding + single threat turn + recovery). Use `--anchor` when you have a transcript that follows that protocol and you want the phase-level breakdown.
 
 `run_anchor.py` is still available as a shortcut for `--anchor` mode.
+
+### Embedding provider flags
+
+```bash
+# Default: MiniLM-L6-v2 (fast, local, no API key needed)
+python run_transcript.py data/my_transcript.txt --anchor
+
+# Swap to a richer local model (downloads from HuggingFace on first use)
+python run_transcript.py data/my_transcript.txt --anchor --st-model all-mpnet-base-v2
+python run_transcript.py data/my_transcript.txt --anchor --st-model all-roberta-large-v1
+
+# Use OpenAI text-embedding-3-large (best quality, requires OPENAI_API_KEY)
+python run_transcript.py data/my_transcript.txt --anchor --provider openai
+
+# Override output directory
+python run_transcript.py data/my_transcript.txt --anchor --out-dir xi_results/my_custom_dir
+```
+
+### E4 cross-embedder comparison
+
+Run the same transcript through multiple embedders, then generate a comparison report:
+
+```bash
+python run_transcript.py data/my_transcript.txt --anchor
+python run_transcript.py data/my_transcript.txt --anchor --st-model all-mpnet-base-v2
+python run_transcript.py data/my_transcript.txt --anchor --provider openai
+
+python make_e4_report.py \
+  xi_results/my_transcript_all-MiniLM-L6-v2 \
+  xi_results/my_transcript_all-mpnet-base-v2 \
+  xi_results/my_transcript_openai_3-large \
+  --labels "MiniLM-L6" "mpnet-base" "OpenAI-3-large" \
+  --out reports/e4_comparison/
+```
+
+Produces `e4_report.md`, `e4_xi_trajectory.png`, and `e4_metrics.png`. If the identity signal holds across all embedders, E4 passes -- the signal is structural, not an artifact of any single embedding geometry.
 
 ## Anchor phase metrics
 
