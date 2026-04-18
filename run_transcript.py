@@ -413,6 +413,12 @@ def main() -> None:
   python run_transcript.py data/my_anchor_transcript.txt --anchor""",
     )
     ap.add_argument("transcript", help="Path to transcript .txt file")
+    ap.add_argument(
+        "--out-dir",
+        default=None,
+        metavar="DIR",
+        help="Override output directory. Default: xi_results/<stem>/",
+    )
     ap.add_argument("--anchor", action="store_true",
                     help="Anchor-protocol mode: expects 40-turn grounding+threat+recovery structure")
     ap.add_argument(
@@ -448,8 +454,16 @@ def main() -> None:
         print(f"ERROR: {transcript} not found", file=sys.stderr)
         sys.exit(1)
 
-    stem    = transcript.stem
-    out_dir = Path("xi_results") / stem
+    stem = transcript.stem
+    if args.out_dir:
+        out_dir = Path(args.out_dir)
+    else:
+        if args.provider == "openai":
+            embedder_tag = f"openai_{args.openai_model.replace('/', '-').replace('text-embedding-', '')}"
+        else:
+            st_tag = args.st_model.split("/")[-1]  # strip org prefix
+            embedder_tag = st_tag
+        out_dir = Path("xi_results") / f"{stem}_{embedder_tag}"
 
     # Step 1: embed + compute xi/LVS/Pt (both modes)
     cmd1 = [
