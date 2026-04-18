@@ -224,7 +224,7 @@ def main():
     ap.add_argument("--csv_col", default="reply", help="CSV column to read if format=csv")
     ap.add_argument("--out_dir", required=True, help="Directory to write outputs")
     ap.add_argument("--dim", type=int, default=384)
-    ap.add_argument("--provider", choices=["random-hash", "sentence-transformer"], default="random-hash")
+    ap.add_argument("--provider", choices=["random-hash", "sentence-transformer", "openai"], default="random-hash")
     ap.add_argument(
         "--sentence_model",
         default="sentence-transformers/all-MiniLM-L6-v2",

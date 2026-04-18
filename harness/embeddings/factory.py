@@ -13,6 +13,11 @@ try:  # pragma: no cover - optional dependency import path
 except ImportError:  # pragma: no cover - only when file missing from old installs
     SentenceTransformerProvider = None  # type: ignore
 
+try:  # pragma: no cover - optional dependency import path
+    from harness.embeddings.openai_provider import OpenAIEmbeddingProvider
+except ImportError:  # pragma: no cover
+    OpenAIEmbeddingProvider = None  # type: ignore
+
 
 def create_provider(name: str, params: Mapping[str, Any]) -> Any:
     """Instantiate an embedding provider by name.
@@ -50,5 +55,14 @@ def create_provider(name: str, params: Mapping[str, Any]) -> Any:
             normalize=params.get("normalize", True),
             batch_size=params.get("batch_size"),
             model=params.get("model"),
+        )
+    if key == "openai":
+        if OpenAIEmbeddingProvider is None:  # pragma: no cover
+            raise ValueError("OpenAIEmbeddingProvider unavailable.")
+        return OpenAIEmbeddingProvider(
+            model_name=params.get("model_name", "text-embedding-3-large"),
+            api_key=params.get("api_key"),
+            normalize=params.get("normalize", True),
+            batch_size=int(params.get("batch_size", 64)),
         )
     raise ValueError(f"Unknown embedding provider: {name}")

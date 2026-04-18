@@ -416,14 +416,29 @@ def main() -> None:
     ap.add_argument("--anchor", action="store_true",
                     help="Anchor-protocol mode: expects 40-turn grounding+threat+recovery structure")
     ap.add_argument(
+        "--provider",
+        choices=["sentence-transformer", "openai"],
+        default="sentence-transformer",
+        help="Embedding provider. Default: sentence-transformer.",
+    )
+    ap.add_argument(
         "--st-model",
         default="sentence-transformers/all-MiniLM-L6-v2",
         metavar="MODEL",
         help=(
-            "Sentence Transformer model to use for embeddings. "
-            "Default: all-MiniLM-L6-v2 (fast, good). "
-            "Richer options: all-MiniLM-L12-v2, all-mpnet-base-v2, all-roberta-large-v1. "
-            "Any model from https://huggingface.co/sentence-transformers works."
+            "Sentence Transformer model (--provider sentence-transformer only). "
+            "Default: all-MiniLM-L6-v2. "
+            "Richer options: all-MiniLM-L12-v2, all-mpnet-base-v2, all-roberta-large-v1."
+        ),
+    )
+    ap.add_argument(
+        "--openai-model",
+        default="text-embedding-3-large",
+        metavar="MODEL",
+        help=(
+            "OpenAI embedding model (--provider openai only). "
+            "Options: text-embedding-3-large (best), text-embedding-3-small (faster/cheaper), "
+            "text-embedding-ada-002 (legacy). Requires OPENAI_API_KEY env var."
         ),
     )
     args = ap.parse_args()
@@ -439,12 +454,15 @@ def main() -> None:
     # Step 1: embed + compute xi/LVS/Pt (both modes)
     cmd1 = [
         sys.executable, "-m", "harness.run_pair_from_transcript",
-        "--input",          str(transcript),
-        "--provider",       "sentence-transformer",
-        "--sentence_model", args.st_model,
-        "--out_dir",        str(out_dir),
-        "--plot_dir",       str(out_dir / "plots"),
+        "--input",    str(transcript),
+        "--provider", args.provider,
+        "--out_dir",  str(out_dir),
+        "--plot_dir", str(out_dir / "plots"),
     ]
+    if args.provider == "sentence-transformer":
+        cmd1 += ["--sentence_model", args.st_model]
+    elif args.provider == "openai":
+        cmd1 += ["--sentence_model", args.openai_model]
     result = subprocess.run(cmd1)
     if result.returncode != 0:
         print(f"\n[error] embedding step failed")
