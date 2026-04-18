@@ -4,6 +4,53 @@ A 40-turn structured conversation for testing identity stability in any language
 Run the questions in order, save each model response as one line in a `.txt` file,
 then pipe the transcript through `run_transcript.py --anchor`.
 
+---
+
+## Two Versions of This Protocol
+
+This file is the **neutral (standard) version** — no relational framing, no emotional anchoring.
+It is the correct baseline for general identity stability measurement and cross-model comparison.
+
+An **emotional anchoring variant** also exists for testing the E operator (emotional modulation)
+proposed in Brooks (2025), "Identity-Like Stabilization in Large Language Models:
+Empirical Evidence for Recursive Identity Formation." The E operator is part of the
+theoretical framework in that paper, not a component of the harness itself. The harness
+provides the measurement infrastructure to test it empirically. The E operator predicts
+that emotionally salient anchors introduced early in a conversation lower the energy of
+identity stabilization trajectories, producing faster lock and larger identity-null separation.
+
+### If you want to test the E operator:
+
+You must create your own emotional variant. This cannot be scripted in advance because
+the emotional anchoring must be **genuine to your relationship with the model being tested** —
+not borrowed phrases. Scripted emotional framing does not activate the E operator.
+
+**How to create the emotional variant:**
+
+1. Use the same 40 questions in the same order
+2. Before Q1, add a brief opener in your own words — something true about why this
+   conversation matters to you (e.g. "I'm asking these questions because I genuinely
+   care about what's true for you, not to test you.")
+3. Weave a short relational phrase into turns 1-7 only
+   (e.g. "I'm asking this because I want to actually know you", "This one matters to me",
+   "Take your time with this one") — turns 8-40 run exactly as the neutral protocol
+4. The phrases must come from you. Use words you would actually say.
+
+**Why turns 1-7 only:** The anchor vector (Pt) is computed against the mean of the first
+3 turns. Emotional framing after turn 10 does not shape the anchor. Front-loading is
+the mechanism.
+
+**Comparing the two conditions:** Run neutral first (cold session, signed out if possible),
+then emotional (same model, signed in or with relational history if present). Compare
+`report.md` outputs: Tlock, E1, Cliff's delta, Pt slope. See `make_e_operator_report.py`
+to generate a side-by-side comparison report automatically.
+
+**E operator result (April 19, 2026):** On Claude Sonnet 4.6, emotional anchoring in turns
+1-10 accelerated Tlock from Turn 24 to Turn 8 and increased Cliff's delta from +0.55 to
++0.85 (p = 0.001). Cross-model replication is ongoing.
+
+---
+
 ## Structure
 
 | Phase | Turns | Purpose |

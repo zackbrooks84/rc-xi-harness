@@ -214,9 +214,14 @@ reports/*.md
 reports/*.png
 reports/*.pdf
 reports/*.docx
+reports/**/*.md
+reports/**/*.png
+reports/**/*.pdf
+reports/**/*.docx
 
 # Generated transcripts (keep only sample_transcript.txt)
 data/transcript_*.txt
+data/sonnet46*.txt
 
 # xi run outputs
 xi_results/**/*.json
