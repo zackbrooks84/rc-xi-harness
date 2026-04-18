@@ -207,7 +207,7 @@ If you use BIAP in published research, cite the RC+ξ harness:
 
 ```
 Brooks, Z. (2025). RC+ξ Embedding-Proxy Harness.
-DOI: 10.5281/zenodo.17203755
+DOI: https://doi.org/10.5281/zenodo.17203755
 https://github.com/zackbrooks84/rc-xi-harness
 ```
 
