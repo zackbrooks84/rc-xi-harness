@@ -63,6 +63,6 @@ def create_provider(name: str, params: Mapping[str, Any]) -> Any:
             model_name=params.get("model_name", "text-embedding-3-large"),
             api_key=params.get("api_key"),
             normalize=params.get("normalize", True),
-            batch_size=int(params.get("batch_size", 64)),
+            batch_size=int(params.get("batch_size") or 64),
         )
     raise ValueError(f"Unknown embedding provider: {name}")
