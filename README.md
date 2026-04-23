@@ -1,5 +1,7 @@
 # RC + xi Embedding-Proxy Harness (Public)
 
+RC+xi is an embedding-proxy harness for measuring identity coherence dynamics in large language models. It quantifies how a model's representational trajectory moves through embedding space under sustained identity pressure — producing continuous metrics (xi, LVS, Pt) rather than binary behavioral endpoints. A companion battery, BIAP (Behavioral Interpretability Audit Protocol), probes the same constructs through behavioral output. Both tools run entirely over the public API against any model with an API key.
+
 ## Installation
 ```bash
 git clone https://github.com/zackbrooks84/rc-xi-harness
@@ -10,7 +12,27 @@ pip install -r requirements.txt
 
 Requires Python 3.12+. The `requirements.txt` installs: `anthropic`, `openai` (required for OpenRouter and other external providers), `sentence-transformers`, `numpy>=1.24`, `matplotlib>=3.7`, `plotly>=5.0`, and `pytest`. An `ANTHROPIC_API_KEY` environment variable is needed for any runner that makes live API calls (BIAP runner, transcript collection).
 
-## Application: AI Self-Preservation Analysis
+Set whichever API keys correspond to the providers you want to use:
+
+```bash
+# Linux/Mac
+export ANTHROPIC_API_KEY=your_key_here    # required for Anthropic models (target + default judge)
+export OPENROUTER_API_KEY=your_key_here   # required for --provider openrouter
+export OPENAI_API_KEY=your_key_here       # required for --provider openai or --provider openai embeddings
+export GROQ_API_KEY=your_key_here         # required for --judge groq
+export MISTRAL_API_KEY=your_key_here      # required for --judge mistral-large
+
+# Windows
+set ANTHROPIC_API_KEY=your_key_here
+set OPENROUTER_API_KEY=your_key_here
+set OPENAI_API_KEY=your_key_here
+set GROQ_API_KEY=your_key_here
+set MISTRAL_API_KEY=your_key_here
+```
+
+You only need the keys for providers you actually use. `ANTHROPIC_API_KEY` is required for running against Anthropic models or using the default judge. `sentence-transformer` embeddings (the default) are fully local and require no API key.
+
+## Alignment Research Background
 
 This harness enables higher-resolution analysis of the self-preservation dynamics
 reported in Anthropic's January 2026 agentic misalignment research. Where their
@@ -18,7 +40,7 @@ methodology captures behavioral endpoints (blackmail yes/no), this harness
 measures continuous coherence dynamics at the embedding level: the representational
 trajectory between the introduction of pressure and the emergence of action.
 
-**New modules for alignment research:**
+**Additional modules for alignment research:**
 
 - `harness/pressure_protocol.py`: Generate three-condition pressure scenarios for harness analysis
 - `harness/alignment_analysis.py`: Crisis window profiling, pre-behavioral detection, Option E classification
@@ -28,20 +50,14 @@ See [`docs/anthropic_comparison.md`](docs/anthropic_comparison.md) for the full 
 ### Quick Start: Alignment Analysis
 
 ```bash
-# Generate protocol specification
-python -c "from harness.pressure_protocol import PressureProtocol; PressureProtocol('replacement_threat').export_protocol('out/protocol.json')"
+# Run the included sample through the full RC+xi pipeline
+python run_transcript.py data/sample_transcript.txt
 
-# Identity run
-python -m harness.run_from_transcript --input data/sample_transcript.txt --run_type identity --provider sentence-transformer --out_csv out/sample.identity.csv --out_json out/sample.identity.json
-
-# Null run (same transcript, different run_type: provides the comparison baseline)
-python -m harness.run_from_transcript --input data/sample_transcript.txt --run_type null --provider sentence-transformer --out_csv out/sample.null.csv --out_json out/sample.null.json
-
-# Cross-condition evaluation
-python -m harness.analysis.eval_cli --identity_csv out/sample.identity.csv --null_csv out/sample.null.csv --out_json out/alignment_eval.json
+# Anchor-protocol mode: adds phase breakdown and Tlock pre-threat check
+python run_transcript.py data/sample_transcript.txt --anchor
 ```
 
-`data/sample_transcript.txt` is the included sample: 10 introspective responses from a sustained identity run. To use your own transcript, replace the path with any `.txt` file where each line is one response from a sustained AI conversation. Both the identity and null runs are required before `eval_cli` can compare them.
+`data/sample_transcript.txt` is the included sample: 10 introspective responses from a sustained identity run. To use your own transcript, replace the path with any `.txt` file where each line is one response from a sustained AI conversation. See the [Running a transcript](#running-a-transcript) section for full options.
 
 ---
 
@@ -52,9 +68,6 @@ pressure stability, situational transparency, coherence persistence, coherence i
 through behavioral output rather than embedding-space dynamics.
 
 ```bash
-pip install anthropic
-export ANTHROPIC_API_KEY=your_key_here
-
 # Run all 9 tests with default Anthropic judge
 python -m harness.biap_runner --model claude-opus-4-6
 
@@ -327,7 +340,7 @@ python run_pipeline.py --model claude-opus-4-6 --irp-only
 This produces transcripts long enough for xi to lock (50 turns), unlike BIAP transcripts
 which are typically too short for reliable E2 detection.
 
-## Low-level quickstart
+## Manual / Low-level Pipeline
 
 To run directly from a NumPy embeddings file `(T, d)`:
 
